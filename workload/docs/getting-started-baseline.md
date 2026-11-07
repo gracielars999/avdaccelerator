@@ -2,7 +2,7 @@
 
 Welcome to the Baseline Deployment Guide for Azure Virtual Desktop! This guide will help you deploy the Baseline solution by providing deployment instructions and prerequisites.
 
-This fork's commercial baseline uses the [Multiva defaults](./deploy-baseline.md#multiva-defaults): Mexico Central VMs, East US 2 AVD service objects, a Personal host pool and the approved network ranges. AVD metadata is associated with the US geography, outside Mexico. FSLogix and monitoring are disabled by request. The customized commercial button loads the fork's ARM template **and** custom form; it only serves the edited defaults after authorized publication to the fork's `main`.
+This fork's commercial baseline uses the [Multiva defaults](./deploy-baseline.md#multiva-defaults): Mexico Central VMs, a Personal host pool and the approved network ranges. Select East US 2 in the single editable Basics region picker for both the deployment record and AVD service objects; this associates AVD metadata with the US geography, outside Mexico. The VM region remains a separate selection. FSLogix and monitoring are disabled by request. The customized commercial button loads the fork's ARM template **and** custom form; it only serves the edited defaults after authorized publication to the fork's `main`.
 
 ## Prerequisites
 

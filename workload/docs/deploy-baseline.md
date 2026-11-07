@@ -6,12 +6,12 @@ The commercial baseline in this fork is the Multiva-specific version of the upst
 
 | Setting | Default |
 |:--|:--|
-| AVD service objects / management plane | East US 2 (`eastus2`) |
+| Deployment record and AVD service objects / management plane | One editable region on Basics; select East US 2 (`eastus2`) for Multiva |
 | Session hosts and workload network | Mexico Central (`mexicocentral`) |
 | Host pool | Personal, automatic assignment |
 | Image | Marketplace, `MicrosoftWindowsDesktop/windows-11/win11-24h2-ent`, latest image version |
 | OS disk | Premium |
-| Availability | Availability Zones, with logical zones 1 and 2 selected when returned for the subscription/region |
+| Availability | Availability Zones, with logical zones 1 and 2 selected; Mexico Central choices are 1, 2 and 3 |
 | FSLogix | Disabled |
 | Virtual network | New, `10.131.0.0/16` |
 | AVD subnet | `10.131.17.0/24` |
@@ -24,7 +24,7 @@ The existing VM size (`Standard_D4ads_v5`), VM count (**1**), and other unrelate
 
 East US 2 is **not** the VM location. Under AVD's default geographical deployment scope, these settings associate AVD metadata with the **US geography**, outside Mexico; they do not guarantee metadata storage exclusively in East US 2. Review [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) and customer residency requirements before deploying. [Mexico Central supports availability zones](https://learn.microsoft.com/azure/reliability/regions-list), but the selected subscription's SKU/image availability, quota and capacity must still be checked.
 
-The Availability Option remains selectable independently of VM size discovery. Zone choices use the selected subscription's [regional logical zone mappings](https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations), not physical zone identifiers or an incomplete SKU-list response. A missing/pending regional response shows an explicit warning and leaves the required zone selection empty; it does not silently switch to regional VMs. Before continuing with zonal deployment, verify the VM size in each selected zone and acknowledge the form's verification checkbox. This form captures deployment intent, not a guarantee of SKU availability or capacity.
+The Availability Option remains selectable independently of VM size discovery. For Mexico Central, the form explicitly offers the region's documented logical zone identifiers **1, 2 and 3**, selecting **1 and 2** for Multiva. This list does not depend on the subscription API returning zone mappings. Other VM regions use the selected subscription's [regional logical zone mappings](https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations), not physical zone identifiers or an incomplete SKU-list response; a missing/pending response there shows a warning and leaves the required zone selection empty. The form does not silently switch to regional VMs. Before continuing with zonal deployment, verify the VM size in each selected zone and acknowledge the form's verification checkbox. Neither the Mexico zone list nor API mappings guarantee SKU availability, subscription eligibility or capacity.
 
 For example, after signing into the **customer's** subscription, this read-only command follows SKU-list pagination and includes subscription restrictions:
 
@@ -36,7 +36,9 @@ Check `locationInfo` for `mexicocentral`, its `zones`, and any location/zone `re
 
 Supply the customer's subscription, deployment prefix, identity/domain information, access groups, and credentials. No customer credentials, subscription ID, or tenant-specific enterprise-application object ID is preconfigured. For Start VM on Connect or scaling, use the existing picker to select the **Azure Virtual Desktop** enterprise application in the customer's tenant. Application ID `9cdead84-a844-4324-93f2-b2e6bb768d07` identifies the application, but its service-principal **object ID varies by tenant** and cannot be substituted with the application ID.
 
-The Basics step retains the upstream composite deployment-scope picker for Portal review. Select the subscription and **Deployment record region** there (East US 2 is recommended). This record location is separate from the explicit **AVD management plane region** default (East US 2) and **Session hosts region** default (Mexico Central); selecting it does not change either resource-region setting. Region-provider and hidden storage-zone lookups are guarded while data is unavailable so they do not dereference an undefined `location` during form review.
+The Basics step has **one editable Deployment and AVD management plane region** picker. Select **East US 2** for Multiva: that selection drives both the subscription deployment record and AVD service objects. The separate **Session hosts region** remains Mexico Central by default. The Bicep/ARM management-plane default is still `eastus2`; the native Portal picker is editable and requires selecting the intended region rather than relying on an undocumented picker default.
+
+Portal's deployment scope output uses the full subscription ARM ID (`/subscriptions/<subscription-id>`), while the template's `avdWorkloadSubsId` parameter and API scopes retain the subscription GUID. Mixing these formats causes the Portal form-to-deployment conversion error described in [validation troubleshooting](./baseline-troubleshooting-guide.md#portal-validation-cannot-read-properties-of-undefined-reading-location).
 
 Register the required providers and verify private-link routing and DNS as described in [Getting Started](./getting-started-baseline.md). The host pool retains the form's private-link default `EnabledForClientsOnly`; review the client/session-host access settings rather than assuming all AVD traffic is private. New DNS zones must be reachable through the customer's DNS design, especially with AD DS and custom DNS servers.
 
@@ -48,7 +50,7 @@ Register the required providers and verify private-link routing and DNS as descr
 
 - **Basics** blade
   - **Subscription** - The subscription where the accelerator is going to deploy the resources.
-  - **AVD management plane region** – Defaults to East US 2 for AVD service objects. The session host location is selected separately.
+  - **Deployment and AVD management plane region** – One editable selection sets both locations. Select East US 2 for Multiva; the session host location is selected separately.
   - **Prefix** – A prefix of maximum 4 characters that will be appended to the names of Resource Groups and Azure resources within the Resource Groups.
   - **Environment** – Deployment Environment type (Development/Test/Production), will be used for naming and tagging purposes.
 - **Identity provider** blade
@@ -124,7 +126,7 @@ Register the required providers and verify private-link routing and DNS as descr
       - **Private endpoint virtual network** - Select virtual network to be used for private endpoint deployment.
       - **Private endpoint subnet** - Select virtual network subnet to be used for private endpoint deployment.
   - **Private endpoints (Key vault and Azure files)** - Select the checkbox to create private endpoints for key vault and Azure file services, when selecting no public endpoints of the services will be used.
-  - **Existing Azure private DNS zone** - Select the checkbox to use an existing private DNS zone for Azure Files and Key vault (Private DNS for Azure files is required for FSLogix deployment to configure properly).
+  - **Azure private DNS zones** - Defaults to **Create new** for the enabled private endpoints. Choose **Use existing** to select existing zones instead. The default does not require existing zone IDs; verify DNS resolution and virtual network links for the customer's network design.
   - **Existing hub VNet peering**
     - **Virtual Network** - Select the hub VNet where this new VNet will be peered with.
     - **VNet Gateway on hub** - Select the checkbox to set the use remote gateway option for the VNet peering.

@@ -43,7 +43,7 @@
 							"visible": true,
 							"options": {
 								"style": "Info",
-								"text": "Multiva defaults: session host VMs in Mexico Central and AVD service objects (workspace, host pool and application groups) in East US 2. The AVD management plane region selector below is separate from the session host region on the Session Hosts step. AVD metadata is stored outside Mexico with these defaults. The subscription selected below will be used to deploy the resources. Monitoring is disabled by request; if enabled with a new Log Analytics workspace, that workspace is created in the AVD management plane region.",
+								"text": "Use the single region picker below for both the subscription deployment record and AVD service objects (workspace, host pool and application groups). Select East US 2 for Multiva; this associates AVD metadata with the US geography, outside Mexico. The VM region is selected separately on Session Hosts and defaults to Mexico Central. The subscription selected below will be used to deploy the resources. Monitoring is disabled by request; if enabled with a new Log Analytics workspace, that workspace uses the shared management plane region.",
 								"uri": "https://docs.microsoft.com/azure/virtual-desktop/data-locations"
 							}
 						},
@@ -51,32 +51,11 @@
 							"name": "resourceScope",
 							"type": "Microsoft.Common.ResourceScope",
 							"location": {
-								"label": "Deployment record region",
-								"toolTip": "Select East US 2 for the subscription deployment record. AVD service objects and session host VMs use their separate region selectors.",
+								"label": "Deployment and AVD management plane region",
+								"toolTip": "This editable selection sets both the subscription deployment record region and AVD service object region. Select East US 2 for Multiva. It does not change the separate session host VM region.",
 								"resourceTypes": [
 									"Microsoft.DesktopVirtualization/workspaces"
 								]
-							}
-						},
-						{
-							"name": "managementPlaneApi",
-							"type": "Microsoft.Solutions.ArmApiControl",
-							"condition": "[not(empty(steps('basics').resourceScope.subscription.subscriptionId))]",
-							"request": {
-								"method": "GET",
-								"path": "[concat('/subscriptions/', steps('basics').resourceScope.subscription.subscriptionId, '/providers/Microsoft.DesktopVirtualization/resourceTypes?api-version=2022-01-01')]"
-							}
-						},
-						{
-							"name": "managementPlaneLocation",
-							"type": "Microsoft.Common.DropDown",
-							"label": "AVD management plane region",
-							"defaultValue": "East US 2",
-							"filter": true,
-							"toolTip": "Region for AVD service objects and metadata, not the session host VMs. East US 2 stores AVD metadata outside Mexico.",
-							"constraints": {
-								"required": true,
-								"allowedValues": "[map(if(empty(steps('basics').managementPlaneApi.value), parse('[]'), if(empty(filter(steps('basics').managementPlaneApi.value, (resourceType) => equals(resourceType.resourceType, 'workspaces'))), parse('[]'), if(empty(first(filter(steps('basics').managementPlaneApi.value, (resourceType) => equals(resourceType.resourceType, 'workspaces'))).locations), parse('[]'), first(filter(steps('basics').managementPlaneApi.value, (resourceType) => equals(resourceType.resourceType, 'workspaces'))).locations))), (region) => parse(concat('{\"label\":\"', region, '\",\"value\":\"', toLower(replace(region, ' ', '')), '\"}')))]"
 							}
 						},
 						{
@@ -569,7 +548,7 @@
 								{
 									"name": "scalingPlan",
 									"type": "Microsoft.Common.CheckBox",
-									"visible": "[not(contains(steps('basics').managementPlaneLocation, 'china'))]",
+									"visible": "[not(contains(steps('basics').resourceScope.location.name, 'china'))]",
 									"label": "Scaling plan",
 									"defaultValue": true,
 									"toolTip": "Will automatically manage session host power state based on usage and schedules (weekdays and weekend schedules will be created)."
@@ -614,7 +593,7 @@
 								{
 									"name": "scalingPlanInfo2",
 									"type": "Microsoft.Common.InfoBox",
-									"visible": "[contains(steps('basics').managementPlaneLocation, 'china')]",
+									"visible": "[contains(steps('basics').resourceScope.location.name, 'china')]",
 									"options": {
 										"text": "Scaling Plan is NOT SUPPORTED in Azure China Cloud",
 										"uri": "https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/?products=all&regions=china-non-regional%2Cchina-east%2Cchina-east-2%2Cchina-east-3%2Cchina-north%2Cchina-north-2%2Cchina-north-3&rar=true",
@@ -723,7 +702,7 @@
 								{
 									"name": "locationZonesApi",
 									"type": "Microsoft.Solutions.ArmApiControl",
-									"condition": "[not(empty(steps('basics').resourceScope.subscription.subscriptionId))]",
+									"condition": "[and(not(empty(steps('basics').resourceScope.subscription.subscriptionId)), if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), false, not(equals(toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), 'mexicocentral'))))]",
 									"request": {
 										"method": "GET",
 										"path": "[concat('/subscriptions/', steps('basics').resourceScope.subscription.subscriptionId, '/locations?api-version=2022-12-01')]"
@@ -1052,7 +1031,7 @@
 									"type": "Microsoft.Common.DropDown",
 									"defaultValue": "Availability Zones",
 									"label": "Availability Option",
-									"toolTip": "Select zonal or regional deployment. Zone choices come from the selected subscription and region, not a partial VM SKU response. Verify that the selected VM size supports the selected zones before deployment.",
+									"toolTip": "Select zonal or regional deployment. Mexico Central uses its documented regional zone identifiers; other regions use subscription zone mappings. Verify that the selected VM size supports the selected zones before deployment.",
 									"constraints": {
 										"required": true,
 										"allowedValues": [
@@ -1081,9 +1060,9 @@
 									],
 									"multiselect": true,
 									"selectAll": true,
-									"toolTip": "Select logical zones in the selected region. Multiva defaults to zones 1 and 2. Regional zone mappings do not confirm VM size eligibility, quota or capacity.",
+									"toolTip": "Mexico Central offers the region's documented zone identifiers 1, 2 and 3 without depending on API zone mappings; Multiva selects 1 and 2. Other regions use returned logical zone mappings. These choices do not confirm VM size eligibility, subscription restrictions, quota or capacity.",
 									"constraints": {
-										"allowedValues": "[map(if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), parse('[]'), if(empty(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value), parse('[]'), if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))), parse('[]'), if(empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings), parse('[]'), first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings)))), (zone) => parse(concat('{\"label\":\"Zone ', string(zone.logicalZone), '\",\"value\":\"', string(zone.logicalZone), '\"}')))]",
+										"allowedValues": "[if(if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), false, equals(toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), 'mexicocentral')), parse('[{\"label\":\"Zone 1\",\"value\":\"1\"},{\"label\":\"Zone 2\",\"value\":\"2\"},{\"label\":\"Zone 3\",\"value\":\"3\"}]'), map(if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), parse('[]'), if(empty(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value), parse('[]'), if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))), parse('[]'), if(empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings), parse('[]'), first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings)))), (zone) => parse(concat('{\"label\":\"Zone ', string(zone.logicalZone), '\",\"value\":\"', string(zone.logicalZone), '\"}'))))]",
 										"required": true
 									},
 									"visible": "[equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones')]"
@@ -1091,7 +1070,7 @@
 								{
 									"name": "availabilityZonesLookupWarning",
 									"type": "Microsoft.Common.InfoBox",
-									"visible": "[and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones'), if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), true, if(empty(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value), true, if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))), true, empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings)))))]",
+									"visible": "[and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones'), if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), true, if(equals(toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), 'mexicocentral'), false, if(empty(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value), true, if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))), true, empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings))))))]",
 									"options": {
 										"style": "Warning",
 										"text": "No logical zone mappings have been returned for the selected subscription and region. The lookup may still be loading, may have failed, or the region may not offer zones. Zonal deployment requires a nonempty zone selection; the form does not silently change to regional deployment. Check the subscription, region and lookup permissions, or explicitly choose regional deployment.",
@@ -1104,7 +1083,7 @@
 									"visible": "[and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones'))]",
 									"options": {
 										"style": "Warning",
-										"text": "The zone list describes this region, not the selected VM size. Verify the VM size's locationInfo.zones and subscription restrictions for every selected zone before deployment. Mexico Central having three zones does not guarantee Standard_D4ads_v5 is available in all of them. Quota and capacity are separate checks.",
+										"text": "For Mexico Central, the template offers the region's documented zone identifiers 1, 2 and 3; it does not rely on the subscription API returning zone mappings. This is not a VM-size eligibility check. Verify the VM size's locationInfo.zones and subscription restrictions for every selected zone before deployment. Mexico Central having three zones does not guarantee Standard_D4ads_v5 is available in all of them. Quota and capacity are separate checks.",
 										"uri": "https://learn.microsoft.com/azure/virtual-machines/sizes/overview#list-available-vm-sizes"
 									}
 								},
@@ -1222,7 +1201,7 @@
 									"toolTip": "Select to replicate storage across availability zones or only use local redundancy.",
 									"constraints": {
 										"required": true,
-										"allowedValues": "[if(or(steps('storage').storageFslogix.fslogixDeployment, steps('storage').storageAppAttach.appAttachStorageDeployment), if(empty(steps('storage').storageGeneralSettings.storageApi.value), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), if(empty(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceType) => equals(resourceType.resourceType, 'storageAccounts'))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), if(empty(first(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceType) => equals(resourceType.resourceType, 'storageAccounts'))).zoneMappings), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), if(empty(filter(first(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceType) => equals(resourceType.resourceType, 'storageAccounts'))).zoneMappings, (mapping) => if(empty(mapping), false, if(or(empty(mapping.location), empty(mapping.zones)), false, and(equals(length(mapping.zones), 3), equals(toLower(replace(mapping.location, ' ', '')), if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation))))))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false},{\"label\":\"Zone-Redundant Storage\",\"value\":true}]'))))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'))]"
+										"allowedValues": "[if(or(steps('storage').storageFslogix.fslogixDeployment, steps('storage').storageAppAttach.appAttachStorageDeployment), if(empty(steps('storage').storageGeneralSettings.storageApi.value), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), if(empty(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceType) => equals(resourceType.resourceType, 'storageAccounts'))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), if(empty(first(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceType) => equals(resourceType.resourceType, 'storageAccounts'))).zoneMappings), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), if(empty(filter(first(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceType) => equals(resourceType.resourceType, 'storageAccounts'))).zoneMappings, (mapping) => if(empty(mapping), false, if(or(empty(mapping.location), empty(mapping.zones)), false, and(equals(length(mapping.zones), 3), equals(toLower(replace(mapping.location, ' ', '')), if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name))))))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false},{\"label\":\"Zone-Redundant Storage\",\"value\":true}]'))))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":false}]'))]"
 									}
 								},
 								{
@@ -1308,14 +1287,14 @@
 								{
 									"name": "appAttachStorageDeployment",
 									"type": "Microsoft.Common.CheckBox",
-									"visible": "[not(contains(steps('basics').managementPlaneLocation, 'china'))]",
+									"visible": "[not(contains(steps('basics').resourceScope.location.name, 'china'))]",
 									"label": "Create App Attach storage",
 									"toolTip": "Deploys App Attach containers and permissions setup."
 								},
 								{
 									"name": "appAttachStorageAccountSku",
 									"type": "Microsoft.Common.DropDown",
-									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').managementPlaneLocation, 'china')))]",
+									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').resourceScope.location.name, 'china')))]",
 									"label": "File share performance",
 									"filter": true,
 									"defaultValue": "Premium",
@@ -1339,7 +1318,7 @@
 								{
 									"name": "sessionHostsAppAttachFileShareQuota",
 									"type": "Microsoft.Common.Slider",
-									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').managementPlaneLocation, 'china')))]",
+									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').resourceScope.location.name, 'china')))]",
 									"label": "File share size",
 									"subLabel": "x 100GB",
 									"toolTip": "Size of Azure File share quota, the maximum sizes are 5TB for standard SKU and 100TB for premium SKU",
@@ -1354,7 +1333,7 @@
 								{
 									"name": "appAttachStorageInfo",
 									"type": "Microsoft.Common.InfoBox",
-									"visible": "[contains(steps('basics').managementPlaneLocation, 'china')]",
+									"visible": "[contains(steps('basics').resourceScope.location.name, 'china')]",
 									"options": {
 										"text": "App Attach is currently NOT SUPPORTED in Azure China Cloud",
 										"style": "Warning"
@@ -1564,7 +1543,7 @@
 							},
 							"scope": {
 								"subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
-								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation)]"
+								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name)]"
 							}
 						},
 						{
@@ -1711,7 +1690,7 @@
 							},
 							"scope": {
 								"subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
-								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation)]"
+								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name)]"
 							}
 						},
 						{
@@ -1755,7 +1734,7 @@
 							"visible": "[or(steps('network').deployPrivateEndpointKeyvaultStorage, steps('network').deployAvdPrivateLinkService)]",
 							"label": "Azure private DNS zones",
 							"defaultValue": "Create new",
-							"toolTip": "It is recommended to use Azure private DNS zones for private endpoint name spaces, private endpoints will be automatically created for PaaS services (Azure Files and Key Vault) if enabled, but the private DNS zones are required for name resolution of private endpoint DNS records.",
+							"toolTip": "Multiva defaults to Create new. Create private DNS zones for the enabled private endpoints, or select Use existing and supply their zone IDs. Verify private DNS resolution and virtual network links before deployment.",
 							"constraints": {
 								"required": true,
 								"allowedValues": [
@@ -2118,7 +2097,7 @@
 						{
 							"name": "deployMonitoringInfo3",
 							"type": "Microsoft.Common.InfoBox",
-							"visible": "[contains(steps('basics').managementPlaneLocation, 'china')]",
+							"visible": "[contains(steps('basics').resourceScope.location.name, 'china')]",
 							"options": {
 								"text": "For Azure China deployment, Monitoring and Diagnostics is only supported in Chinaeast2 and Chinanorth3 regions",
 								"uri": "https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/?products=all&regions=china-non-regional%2Cchina-east%2Cchina-east-2%2Cchina-east-3%2Cchina-north%2Cchina-north-2%2Cchina-north-3&rar=true",
@@ -2866,8 +2845,8 @@
 				"deploymentPrefix": "[steps('basics').deploymentSpecs.deploymentPrefix]",
 				"deploymentEnvironment": "[steps('basics').deploymentSpecs.deploymentEnvironment]",
 				"diskZeroTrust": "[steps('sessionHosts').sessionHostsSettingsSection.sessionHostDiskZeroTrust]",
-				"avdManagementPlaneLocation": "[steps('basics').managementPlaneLocation]",
-				"avdSessionHostLocation": "[if(equals(steps('sessionHosts').deploySessionHosts, true), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation)]",
+				"avdManagementPlaneLocation": "[steps('basics').resourceScope.location.name]",
+				"avdSessionHostLocation": "[if(equals(steps('sessionHosts').deploySessionHosts, true), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name)]",
 				"avdWorkloadSubsId": "[steps('basics').resourceScope.subscription.subscriptionId]",
 				"avdHostPoolType": "[steps('managementPlane').managementPlaneHostPoolSettings.hostPoolType]",
 				"hostPoolPreferredAppGroupType": "[if(equals(steps('managementPlane').managementPlaneHostPoolSettings.hostPoolType, 'Pooled'), steps('managementPlane').managementPlaneAppGroupOptions.preferredAppGroupType, 'Desktop')]",
@@ -2895,7 +2874,7 @@
 				"existingVnetPrivateEndpointSubnetResourceId": "[if(equals(steps('network').createAvdVirtualNetwork, false), steps('network').virtualNetworkPrivateEndpointSubnetSelectorName, '')]",
 				"avdDeploySessionHosts": "[steps('sessionHosts').deploySessionHosts]",
 				"avdStartVmOnConnect": "[steps('managementPlane').managementPlaneHostPoolScaling.startVmOnConnect]",
-				"avdDeployScalingPlan": "[if(contains(steps('basics').managementPlaneLocation, 'china'), false, steps('managementPlane').managementPlaneHostPoolScaling.scalingPlan)]",
+				"avdDeployScalingPlan": "[if(contains(steps('basics').resourceScope.location.name, 'china'), false, steps('managementPlane').managementPlaneHostPoolScaling.scalingPlan)]",
 				"availability": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsAvailabilitySection.option, 'None')]",
 				"availabilityZones": "[if(and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones')), map(if(startsWith(string(steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones), '['), steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones, split(string(steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones), ',')), (zone) => string(zone)), parse('[]'))]",
 				"zoneRedundantStorage": "[if(or(steps('storage').storageFslogix.fslogixDeployment, steps('storage').storageAppAttach.appAttachStorageDeployment), steps('storage').storageGeneralSettings.storageGeneralSettingsZoneRedundancy, false)]",
@@ -2926,7 +2905,7 @@
 				"createAvdFslogixDeployment": "[steps('storage').storageFslogix.fslogixDeployment]",
 				"fslogixStoragePerformance": "[if(equals(steps('storage').storageFslogix.fslogixDeployment, true), steps('storage').storageFslogix.fslogixStorageAccountSku, 'Premium')]",
 				"fslogixFileShareQuotaSize": "[if(equals(steps('storage').storageFslogix.fslogixDeployment, true), steps('storage').storageFslogix.sessionHostsFslogixFileShareQuota, 1 )]",
-				"createAppAttachDeployment": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), if(contains(steps('basics').managementPlaneLocation, 'china'), false, steps('storage').storageAppAttach.appAttachStorageDeployment), false)]",
+				"createAppAttachDeployment": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), if(contains(steps('basics').resourceScope.location.name, 'china'), false, steps('storage').storageAppAttach.appAttachStorageDeployment), false)]",
 				"appAttachStoragePerformance": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), steps('storage').storageAppAttach.appAttachStorageAccountSku, 'Premium')]",
 				"appAttachFileShareQuotaSize": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), steps('storage').storageAppAttach.sessionHostsAppAttachFileShareQuota, 1 )]",
 				"storageOuPath": "[if(or(steps('storage').storageFslogix.fslogixDeployment, steps('storage').storageAppAttach.appAttachStorageDeployment), steps('storage').storageGeneralSettings.identityDomainOuPathStorageExisting, '')]",
@@ -2985,7 +2964,7 @@
 			},
 			"kind": "Subscription",
 			"location": "[steps('basics').resourceScope.location.name]",
-			"subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]"
+			"subscriptionId": "[concat('/subscriptions/', steps('basics').resourceScope.subscription.subscriptionId)]"
 		}
 	}
 }

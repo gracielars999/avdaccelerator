@@ -1,5 +1,13 @@
 # Troubleshooting Guide: Azure Virtual Desktop Landing Zone Accelerator
 
+## Portal validation: Cannot read properties of undefined (reading 'location')
+
+If the error is a `TypeError` in the `Microsoft_Azure_CreateUIDef` extension with `getFormTemplateDeploymentOptions` in its stack, it occurs during the Portal's form-to-deployment conversion, before ARM validation. It is not evidence of a monitoring-policy permission failure.
+
+For a subscription deployment, Portal's `view.outputs.subscriptionId` must be a subscription **ARM ID**, `/subscriptions/<subscription-id>`, not the bare GUID. The reported converter parses that ID to build its deployment scope; an invalid scope can leave that object undefined before its `location` is read. This fork constructs the ARM ID from the selected subscription GUID for the deployment output. The template parameter `avdWorkloadSubsId` and resource/API picker scopes still use the GUID, as required.
+
+Close an older deployment tab and reopen the newly published form; existing tabs or commit-pinned links keep the older output expression. Select the subscription and shared deployment/management region, then run **Review + create** again. Publication and offline contract checks do not constitute a successful live Portal validation or customer deployment. If the error persists with the new version, collect the full error JSON and form version without sharing credentials or access tokens.
+
 ## Monitoring and subscription-level policies
 
 **Insufficient permissions can cause this option to fail, but a previous unspecified monitoring error cannot be attributed to RBAC without the failed operation.** The Multiva profile disables monitoring by explicit customer request, not as a workaround or proof that the failure is fixed.

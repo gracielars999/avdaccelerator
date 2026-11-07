@@ -170,8 +170,7 @@ function state() {
       resourceScope: {
         subscription: { subscriptionId: '00000000-0000-4000-8000-000000000001' },
         location: { name: 'eastus2', displayName: 'East US 2' }
-      },
-      managementPlaneApi: { value: [{ resourceType: 'workspaces', locations: ['East US 2'] }] }
+      }
     },
     managementPlane: { managementPlaneHostPoolSettings: {} },
     sessionHosts: {
@@ -200,7 +199,6 @@ function state() {
     network: {},
     monitoring: {}
   };
-  value.basics.managementPlaneLocation = defaultValue('managementPlaneLocation', value);
   value.managementPlane.managementPlaneHostPoolSettings.hostPoolType = defaultValue('hostPoolType', value);
   value.sessionHosts.deploySessionHosts = defaultValue('deploySessionHosts', value);
   const hosts = value.sessionHosts;
@@ -354,11 +352,27 @@ test('missing or paged SKU data cannot remove Availability Zones or change the z
   assert.equal(JSON.stringify(form).includes('resourceSkusApi'), false);
 });
 
-test('pending, failed and missing regional zone lookups show a warning without silently selecting regional deployment', () => {
+test('Mexico zone choices and defaults do not depend on missing subscription zone mappings', () => {
   const value = state();
   for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
-    { value: [{ name: 'eastus2', availabilityZoneMappings: [] }] },
     { value: [{ name: 'mexicocentral' }] },
+    { value: [{ name: 'mexicocentral', availabilityZoneMappings: [] }] }]) {
+    value.sessionHosts.sessionHostsRegionSection.locationZonesApi = response;
+    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
+      ['1', '2', '3']);
+    assert.deepEqual(defaultValue('availabilityZones', value), ['1', '2']);
+    assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
+    assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
+    assert.equal(uiEvaluate(control('availabilityZonesSkuWarning').visible, value), true);
+  }
+});
+
+test('pending, failed and missing zone lookups outside Mexico show a warning without silently selecting regional deployment', () => {
+  const value = state();
+  value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = 'eastus2';
+  for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
+    { value: [{ name: 'eastus2', availabilityZoneMappings: [] }] },
+    { value: [{ name: 'eastus2' }] },
     { value: [{ name: 'mexicocentral', availabilityZoneMappings: [] }] }]) {
     value.sessionHosts.sessionHostsRegionSection.locationZonesApi = response;
     assert.equal(defaultValue('option', value), 'AvailabilityZones');
@@ -375,6 +389,11 @@ test('regional lookup is scoped to the selected subscription and never uses the 
   assert.equal(uiEvaluate(control('locationZonesApi').request.path, value),
     `/subscriptions/${value.basics.resourceScope.subscription.subscriptionId}/locations?api-version=2022-12-01`);
   assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
+  assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
+  value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = 'eastus2';
+  assert.equal(uiEvaluate(control('locationZonesApi').condition, value), true);
+  value.basics.resourceScope.subscription.subscriptionId = '';
+  assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
 });
 
 test('a region not selected yet leaves required zones empty and shows the lookup warning', () => {
@@ -383,6 +402,7 @@ test('a region not selected yet leaves required zones empty and shows the lookup
     value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = region;
     assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value), []);
     assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), true);
+    assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
   }
 });
 
@@ -403,6 +423,50 @@ test('Marketplace filtering retains both single-session Enterprise and multi-ses
   assert.ok(values.includes('win11-24h2-avd'));
 });
 
+test('Create new private DNS is the native form default and does not request existing zone IDs', () => {
+  const value = state();
+  assert.equal(control('virtualNetworkPrivateDnsZone').defaultValue, 'Create new');
+  assert.equal(defaultValue('virtualNetworkPrivateDnsZone', value), true);
+  assert.equal(template.parameters.createPrivateDnsZones.defaultValue, true);
+  assert.equal(output('createPrivateDnsZones', value), true);
+  assert.equal(uiEvaluate(control('virtualNetworkPrivateDnsZoneSelection').visible, value), false);
+  assert.equal(uiEvaluate(control('privateDNSZonesApi').condition, value), false);
+  for (const name of ['avdVnetPrivateDnsZoneFilesId', 'avdVnetPrivateDnsZoneKeyvaultId',
+    'avdVnetPrivateDnsZoneDiscoveryResourceId', 'avdVnetPrivateDnsZoneConnectionResourceId']) {
+    assert.equal(output(name, value), '');
+  }
+});
+
+test('explicit existing private DNS choices and disabled private endpoints are not overridden by the new-zone default', () => {
+  const value = state();
+  const prefix = `/subscriptions/${value.basics.resourceScope.subscription.subscriptionId}/resourceGroups/rg-dns/providers/Microsoft.Network/privateDnsZones/`;
+  const names = {
+    avdVnetPrivateDnsZoneFilesId: ['azureFilesPrivateDnsZone', 'privatelink.file.core.windows.net'],
+    avdVnetPrivateDnsZoneKeyvaultId: ['azureKeyVaultPrivateDnsZone', 'privatelink.vaultcore.azure.net'],
+    avdVnetPrivateDnsZoneDiscoveryResourceId: ['avdDiscoveryPrivateDnsZone', 'privatelink-global.wvd.microsoft.com'],
+    avdVnetPrivateDnsZoneConnectionResourceId: ['avdConnectionPrivateDnsZone', 'privatelink.wvd.microsoft.com']
+  };
+  assert.deepEqual(control('virtualNetworkPrivateDnsZone').constraints.allowedValues, [
+    { label: 'Create new', value: true }, { label: 'Use existing', value: false }
+  ]);
+  value.network.virtualNetworkPrivateDnsZone = false;
+  value.network.deployPrivateEndpointKeyvaultStorage = true;
+  value.network.virtualNetworkPrivateDnsZoneSelection = Object.fromEntries(
+    Object.values(names).map(([controlName, zone]) => [controlName, `${prefix}${zone}`]));
+  assert.equal(output('createPrivateDnsZones', value), false);
+  assert.equal(uiEvaluate(control('virtualNetworkPrivateDnsZoneSelection').visible, value), true);
+  assert.equal(uiEvaluate(control('privateDNSZonesApi').condition, value), true);
+  for (const [name, [, zone]] of Object.entries(names)) {
+    assert.equal(output(name, value), `${prefix}${zone}`);
+  }
+  value.network.virtualNetworkPrivateDnsZone = true;
+  value.network.deployPrivateEndpointKeyvaultStorage = false;
+  value.network.deployAvdPrivateLinkService = false;
+  assert.equal(output('createPrivateDnsZones', value), false);
+  assert.equal(uiEvaluate(control('virtualNetworkPrivateDnsZone').visible, value), false);
+  assert.equal(uiEvaluate(control('privateDNSZonesApi').condition, value), false);
+});
+
 test('retention validates every integer from 30 through 730 and exports an integer', () => {
   const regex = new RegExp(control('deployMonitoringNewAlaWorkspaceRetention').constraints.regex);
   for (let days = 30; days <= 730; days++) assert.ok(regex.test(String(days)), String(days));
@@ -416,12 +480,15 @@ test('retention validates every integer from 30 through 730 and exports an integ
   assert.equal(template.parameters.avdAlaWorkspaceDataRetention.type, 'int');
 });
 
-test('every form parameter output exists in the compiled template and subscription IDs are canonical', () => {
+test('deployment scope outputs a subscription ARM ID while template parameters and API scopes retain the GUID', () => {
   for (const name of Object.keys(form.view.outputs.parameters)) assert.ok(Object.hasOwn(template.parameters, name), name);
   const value = state();
   assert.equal(form.view.outputs.kind, 'Subscription');
   assert.equal(uiEvaluate(form.view.outputs.location, value), 'eastus2');
-  assert.equal(uiEvaluate(form.view.outputs.subscriptionId, value), value.basics.resourceScope.subscription.subscriptionId);
+  assert.equal(uiEvaluate(form.view.outputs.subscriptionId, value),
+    `/subscriptions/${value.basics.resourceScope.subscription.subscriptionId}`);
+  assert.match(uiEvaluate(form.view.outputs.subscriptionId, value),
+    /^\/subscriptions\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
   assert.equal(output('avdWorkloadSubsId', value), value.basics.resourceScope.subscription.subscriptionId);
   assert.equal(control('resourceScope').type, 'Microsoft.Common.ResourceScope');
   for (const name of ['avdVirtualNetworkSelectorId', 'privateEndpointVirtualNetworkSelectorId',
@@ -431,25 +498,49 @@ test('every form parameter output exists in the compiled template and subscripti
   }
 });
 
-test('review uses the composite deployment location without changing either AVD resource region', () => {
+test('one editable native region drives both deployment review and AVD management while VM location stays separate', () => {
   const value = state();
-  value.basics.resourceScope.location = { name: 'westus2', displayName: 'West US 2' };
-  assert.equal(uiEvaluate(form.view.outputs.location, value), 'westus2');
-  assert.equal(output('avdManagementPlaneLocation', value), 'eastus2');
-  assert.equal(output('avdSessionHostLocation', value), 'mexicocentral');
+  assert.deepEqual(control('resourceScope').location.resourceTypes, ['Microsoft.DesktopVirtualization/workspaces']);
+  assert.equal(Object.hasOwn(control('resourceScope').location, 'defaultValue'), false);
+  for (const name of ['managementPlaneLocation', 'managementPlaneApi']) {
+    assert.equal([...objects(form)].some(element => element.name === name), false);
+    assert.equal(JSON.stringify(form).includes(`steps('basics').${name}`), false);
+  }
+  for (const [name, displayName] of [['eastus2', 'East US 2'], ['westus2', 'West US 2']]) {
+    value.basics.resourceScope.location = { name, displayName };
+    assert.equal(uiEvaluate(form.view.outputs.location, value), name);
+    assert.equal(output('avdManagementPlaneLocation', value), name);
+    assert.equal(output('avdSessionHostLocation', value), 'mexicocentral');
+    value.sessionHosts.deploySessionHosts = false;
+    assert.equal(output('avdSessionHostLocation', value), name);
+    for (const selector of ['avdVirtualNetworkSelectorId', 'privateEndpointVirtualNetworkSelectorId']) {
+      assert.equal(uiEvaluate(control(selector).scope.location, value), name);
+    }
+    value.sessionHosts.deploySessionHosts = true;
+  }
   value.basics.resourceScope.location = undefined;
   assert.equal(uiEvaluate(form.view.outputs.location, value), undefined);
+  assert.equal(output('avdManagementPlaneLocation', value), undefined);
 });
 
-test('pending region-provider responses cannot dereference missing location data', () => {
+test('China feature gating follows the shared editable management region', () => {
+  const value = state();
+  value.managementPlane.managementPlaneHostPoolScaling = { scalingPlan: true };
+  value.storage.storageAppAttach.appAttachStorageDeployment = true;
+  value.basics.resourceScope.location = { name: 'chinaeast2' };
+  assert.equal(output('avdDeployScalingPlan', value), false);
+  assert.equal(output('createAppAttachDeployment', value), false);
+  value.basics.resourceScope.location = { name: 'eastus2' };
+  assert.equal(output('avdDeployScalingPlan', value), true);
+  assert.equal(output('createAppAttachDeployment', value), true);
+});
+
+test('pending VM region-provider responses cannot dereference missing location data', () => {
   const value = state();
   for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
     { value: [{ resourceType: 'workspaces' }, { resourceType: 'virtualMachines' }] }]) {
-    value.basics.managementPlaneApi = response;
     value.sessionHosts.sessionHostsRegionSection.computeApi = response;
-    assert.deepEqual(uiEvaluate(control('managementPlaneLocation').constraints.allowedValues, value), []);
     assert.deepEqual(uiEvaluate(control('sessionHostsRegion').constraints.allowedValues, value), []);
-    assert.equal(control('managementPlaneLocation').constraints.required, true);
     assert.equal(control('sessionHostsRegion').constraints.required, true);
   }
 });
