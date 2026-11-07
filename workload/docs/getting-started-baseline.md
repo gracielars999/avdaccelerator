@@ -2,6 +2,8 @@
 
 Welcome to the Baseline Deployment Guide for Azure Virtual Desktop! This guide will help you deploy the Baseline solution by providing deployment instructions and prerequisites.
 
+This fork's commercial baseline uses the [Multiva defaults](./deploy-baseline.md#multiva-defaults): Mexico Central VMs, East US 2 AVD service objects, a Personal host pool and the approved network ranges. AVD metadata is associated with the US geography, outside Mexico. FSLogix and monitoring are disabled by request. The customized commercial button loads the fork's ARM template **and** custom form; it only serves the edited defaults after authorized publication to the fork's `main`.
+
 ## Prerequisites
 
 Prior to deploying the Baseline solution, you need to ensure you have met the following prerequisites:
@@ -14,6 +16,7 @@ Prior to deploying the Baseline solution, you need to ensure you have met the fo
 ### Subscription requirements
 
 - [x] Access to the Azure Virtual Desktop Azure subscription with owner permissions.
+- [x] If enabling **Deploy monitoring policies (subscription level)**, the deployment identity needs policy/initiative creation permissions at subscription scope, plus assignment, managed-identity role-assignment and remediation permissions at the affected scopes. RG-only Owner or subscription Contributor is not sufficient. Review [monitoring policy permissions](./baseline-troubleshooting-guide.md#monitoring-and-subscription-level-policies); other baseline features also create role assignments even when monitoring is disabled.
 - [x]  The following resource provider must be registered in the subscription to be used for deployment:
   - Microsoft.DesktopVirtualization
   - Microsoft.Compute (When deploying Zero Trust match feature [EncryptionAtHost](https://learn.microsoft.com/azure/virtual-machines/disks-enable-host-based-encryption-portal?tabs=azure-powershell) will need to be registered)
@@ -41,7 +44,7 @@ Prior to deploying the Baseline solution, you need to ensure you have met the fo
 - [x]  Virtual network subnet used for Azure Virtual Desktop session host deployment, needs to access the following:
   - [list of URLs](https://learn.microsoft.com/azure/virtual-desktop/safe-url-list?tabs=azure#session-host-virtual-machines) session host VMs need to access for Azure Virtual Desktop (During and after deployment).
   - List of URLs required during deployment:
-    - <https://raw.githubusercontent.com/Azure/avdaccelerator/main/workload/scripts/Set-SessionHostConfiguration.ps1>
+    - <https://raw.githubusercontent.com/gracielars999/avdaccelerator/main/workload/scripts/Set-SessionHostConfiguration.ps1> (commercial Multiva baseline; requires publication of this fork's changes)
     - <https://raw.githubusercontent.com/Azure/avdaccelerator/main/workload/scripts/Manual-DSC-Storage-Scripts.ps1>
     - https://github.com/Azure/avdaccelerator/raw/main/workload/scripts/DSCStorageScripts/<version_number>/DSCStorageScripts.zip
     - <https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_09-08-2022.zip>
@@ -109,7 +112,7 @@ The templates and scripts need to be executed from an execution environment, the
 
 | Deployment Type | Link |
 |:--|:--|
-| Azure portal UI |[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure China](https://aka.ms/deploytoazurechinabutton)](https://portal.azure.cn/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json)|
+| Azure portal UI |[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgracielars999%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fgracielars999%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure China](https://aka.ms/deploytoazurechinabutton)](https://portal.azure.cn/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json)|
 | Command line (Bicep/ARM) | [![Powershell/Azure CLI](./icons/powershell.png)](../bicep/readme.md#avd-accelerator-baseline) |
 | Terraform | [![Terraform](./icons/terraform.png)](../terraform/greenfield/readme.md) |
 

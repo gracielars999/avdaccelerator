@@ -3,7 +3,7 @@
 	"view": {
 		"kind": "Form",
 		"properties": {
-			"title": "Azure Virtual Desktop - Landing Zone Accelerator (LZA) - Baseline",
+			"title": "Azure Virtual Desktop - Multiva - Mexico Central session hosts",
 			"steps": [
 				{
 					"name": "basics",
@@ -23,7 +23,7 @@
 							"visible": true,
 							"options": {
 								"text": "PREREQUISITES REQUIRED \n\nThere are prerequisites that must be setup in your Azure environment to successfully deploy this Azure Virtual Desktop Landing Zone Accelerator. Click here to review the prerequisites in the Getting Started guide.",
-								"uri": "https://github.com/Azure/avdaccelerator/blob/main/workload/docs/getting-started-baseline.md",
+								"uri": "https://github.com/gracielars999/avdaccelerator/blob/main/workload/docs/getting-started-baseline.md",
 								"style": "Warning"
 							}
 						},
@@ -43,17 +43,41 @@
 							"visible": true,
 							"options": {
 								"style": "Info",
-								"text": "The subscription selected in the 'Project details' section below will be used to deploy all resources. \n\nThe region selected in 'Instance details' section below will be used to deploy the Azure Virtual Desktop management plane resources (workspace, host pool, and application group, etc.). These resource types are not available in all regions, but they are globally replicated.\n\nThe session hosts do not have to be deployed to the same region, therefore you will have the option to select that region on the 'Session Hosts' blade.",
+								"text": "Multiva defaults: session host VMs in Mexico Central and AVD service objects (workspace, host pool and application groups) in East US 2. The AVD management plane region selector below is separate from the session host region on the Session Hosts step. AVD metadata is stored outside Mexico with these defaults. The subscription selected below will be used to deploy the resources. Monitoring is disabled by request; if enabled with a new Log Analytics workspace, that workspace is created in the AVD management plane region.",
 								"uri": "https://docs.microsoft.com/azure/virtual-desktop/data-locations"
 							}
 						},
 						{
-							"name": "resourceScope",
-							"type": "Microsoft.Common.ResourceScope",
-							"location": {
-								"resourceTypes": [
-									"Microsoft.DesktopVirtualization/workspaces"
+							"name": "subscription",
+							"type": "Microsoft.Common.SubscriptionSelector",
+							"constraints": {
+								"validations": [
+									{
+										"isValid": "[not(empty(steps('basics').subscription.subscriptionId))]",
+										"message": "Select the subscription for the deployment."
+									}
 								]
+							}
+						},
+						{
+							"name": "managementPlaneApi",
+							"type": "Microsoft.Solutions.ArmApiControl",
+							"condition": "[not(empty(steps('basics').subscription.subscriptionId))]",
+							"request": {
+								"method": "GET",
+								"path": "[concat('/subscriptions/', steps('basics').subscription.subscriptionId, '/providers/Microsoft.DesktopVirtualization/resourceTypes?api-version=2022-01-01')]"
+							}
+						},
+						{
+							"name": "managementPlaneLocation",
+							"type": "Microsoft.Common.DropDown",
+							"label": "AVD management plane region",
+							"defaultValue": "East US 2",
+							"filter": true,
+							"toolTip": "Region for AVD service objects and metadata, not the session host VMs. East US 2 stores AVD metadata outside Mexico.",
+							"constraints": {
+								"required": true,
+								"allowedValues": "[map(first(map(filter(steps('basics').managementPlaneApi.value, (resourceType) => equals(resourceType.resourceType, 'workspaces')), (resourceType) => resourceType.locations)), (region) => parse(concat('{\"label\":\"', region, '\",\"value\":\"', toLower(replace(region, ' ', '')), '\"}')))]"
 							}
 						},
 						{
@@ -186,7 +210,7 @@
 									"visible": "[not(contains(steps('identity').identityDomainInformation.identityServiceProvider, 'EntraID'))]",
 									"options": {
 										"text": "Identity service provider must already exist, as it is a prerequisite for the Azure Virtual Desktop LZA deployment.",
-										"uri": "https://github.com/Azure/avdaccelerator/blob/main/workload/docs/getting-started.md",
+										"uri": "https://github.com/gracielars999/avdaccelerator/blob/main/workload/docs/getting-started-baseline.md",
 										"style": "Info"
 									}
 								},
@@ -416,7 +440,7 @@
 									"type": "Microsoft.Common.DropDown",
 									"visible": true,
 									"label": "Host pool type",
-									"defaultValue": "Pooled",
+									"defaultValue": "Personal",
 									"multiLine": true,
 									"toolTip": "",
 									"constraints": {
@@ -546,7 +570,7 @@
 								{
 									"name": "scalingPlan",
 									"type": "Microsoft.Common.CheckBox",
-									"visible": "[not(contains(steps('basics').resourceScope.location.name, 'china'))]",
+									"visible": "[not(contains(steps('basics').managementPlaneLocation, 'china'))]",
 									"label": "Scaling plan",
 									"defaultValue": true,
 									"toolTip": "Will automatically manage session host power state based on usage and schedules (weekdays and weekend schedules will be created)."
@@ -591,7 +615,7 @@
 								{
 									"name": "scalingPlanInfo2",
 									"type": "Microsoft.Common.InfoBox",
-									"visible": "[contains(steps('basics').resourceScope.location.name, 'china')]",
+									"visible": "[contains(steps('basics').managementPlaneLocation, 'china')]",
 									"options": {
 										"text": "Scaling Plan is NOT SUPPORTED in Azure China Cloud",
 										"uri": "https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/?products=all&regions=china-non-regional%2Cchina-east%2Cchina-east-2%2Cchina-east-3%2Cchina-north%2Cchina-north-2%2Cchina-north-3&rar=true",
@@ -651,11 +675,24 @@
 					"elements": [
 						{
 							"name": "deploySessionHosts",
-							"type": "Microsoft.Common.CheckBox",
+							"type": "Microsoft.Common.OptionsGroup",
 							"visible": true,
 							"label": "Deploy session hosts",
-							"defaultValue": true,
-							"toolTip": "Create session hosts compute and storage resources."
+							"defaultValue": "Yes",
+							"toolTip": "Create session hosts compute and storage resources.",
+							"constraints": {
+								"required": true,
+								"allowedValues": [
+									{
+										"label": "Yes",
+										"value": true
+									},
+									{
+										"label": "No",
+										"value": false
+									}
+								]
+							}
 						},
 						{
 							"name": "sessionHostsRegionSection",
@@ -668,14 +705,14 @@
 									"type": "Microsoft.Solutions.ArmApiControl",
 									"request": {
 										"method": "GET",
-										"path": "[concat(steps('basics').resourceScope.subscription.id,'/providers/Microsoft.Compute/resourceTypes?api-version=2022-01-01')]"
+										"path": "[concat('/subscriptions/', steps('basics').subscription.subscriptionId, '/providers/Microsoft.Compute/resourceTypes?api-version=2022-01-01')]"
 									}
 								},
 								{
 									"name": "sessionHostsRegion",
 									"type": "Microsoft.Common.DropDown",
 									"label": "Session hosts region",
-									"defaultValue": "[steps('basics').resourceScope.location.displayName]",
+									"defaultValue": "Mexico Central",
 									"filter": true,
 									"toolTip": "Select the region where the session hosts and required resources are to be deployed.",
 									"constraints": {
@@ -689,7 +726,7 @@
 									"condition": "[not(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion))]",
 									"request": {
 										"method": "GET",
-										"path": "[concat(steps('basics').resourceScope.subscription.id, '/providers/Microsoft.Compute/skus?api-version=2021-07-01&$filter=location eq ', decodeUriComponent('%27'), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, decodeUriComponent('%27'))]"
+										"path": "[concat('/subscriptions/', steps('basics').subscription.subscriptionId, '/providers/Microsoft.Compute/skus?api-version=2021-07-01&$filter=location eq ', decodeUriComponent('%27'), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, decodeUriComponent('%27'))]"
 									}
 								}
 							]
@@ -740,7 +777,7 @@
 									"name": "offer",
 									"type": "Microsoft.Common.DropDown",
 									"label": "Offer",
-									"defaultValue": "Office-365",
+									"defaultValue": "Windows-11",
 									"toolTip": "Select the desired marketplace image offer.",
 									"constraints": {
 										"allowedValues": [
@@ -767,17 +804,17 @@
 									"condition": "[and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsOsSection.source, 'marketplace'), not(empty(steps('sessionHosts').sessionHostsOsSection.offer)))]",
 									"request": {
 										"method": "GET",
-										"path": "[concat(steps('basics').resourceScope.subscription.id, '/providers/Microsoft.Compute/locations/', steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, '/publishers/MicrosoftWindowsDesktop/artifacttypes/vmimage/offers/', steps('sessionHosts').sessionHostsOsSection.offer, '/skus?api-version=2022-08-01')]"
+										"path": "[concat('/subscriptions/', steps('basics').subscription.subscriptionId, '/providers/Microsoft.Compute/locations/', steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, '/publishers/MicrosoftWindowsDesktop/artifacttypes/vmimage/offers/', steps('sessionHosts').sessionHostsOsSection.offer, '/skus?api-version=2022-08-01')]"
 									}
 								},
 								{
 									"name": "sku",
 									"type": "Microsoft.Common.DropDown",
 									"label": "SKU",
-									"defaultValue": "win11-24h2-avd-m365",
+									"defaultValue": "win11-24h2-ent",
 									"toolTip": "Select the desired marketplace image SKU.",
 									"constraints": {
-										"allowedValues": "[map(filter(steps('sessionHosts').sessionHostsOsSection.skusApi, (sku) => and(startsWith(sku.name, 'win'), not(contains(sku.name, 'ent')), or(contains(sku.name, 'ent'), contains(sku.name, 'avd')))), (sku) => parse(concat('{\"label\":\"', sku.name, '\",\"value\":\"', sku.name, '\"}')))]",
+										"allowedValues": "[map(filter(steps('sessionHosts').sessionHostsOsSection.skusApi, (sku) => and(startsWith(sku.name, 'win'), or(contains(sku.name, 'ent'), contains(sku.name, 'avd')))), (sku) => parse(concat('{\"label\":\"', sku.name, '\",\"value\":\"', sku.name, '\"}')))]",
 										"required": true
 									},
 									"visible": "[equals(steps('sessionHosts').sessionHostsOsSection.source, 'marketplace')]"
@@ -887,7 +924,7 @@
 									"osPlatform": "Windows",
 									"scope": {
 										"location": "[steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion]",
-										"subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]"
+										"subscriptionId": "[steps('basics').subscription.subscriptionId]"
 									}
 								},
 								{
@@ -1013,12 +1050,12 @@
 								{
 									"name": "option",
 									"type": "Microsoft.Common.DropDown",
-									"defaultValue": "[if(empty(first(map(first(map(filter(steps('sessionHosts').sessionHostsRegionSection.resourceSkusApi.value, (sku) => contains(sku.name, steps('sessionHosts').sessionHostsSettingsSection.sessionHostSize)), (sku) => sku.locationInfo)), (sku) => sku.zones))), 'No infrastructure redundancy required', 'Availability Zones')]",
+									"defaultValue": "[if(empty(first(map(filter(first(map(filter(steps('sessionHosts').sessionHostsRegionSection.resourceSkusApi.value, (sku) => equals(sku.name, steps('sessionHosts').sessionHostsSettingsSection.sessionHostSize)), (sku) => sku.locationInfo)), (info) => equals(info.location, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)), (info) => info.zones))), 'No infrastructure redundancy required', 'Availability Zones')]",
 									"label": "Availability Option",
 									"toolTip": "Select the redundancy / resiliency for the virtual machines.",
 									"constraints": {
 										"required": true,
-										"allowedValues": "[if(empty(first(map(first(map(filter(steps('sessionHosts').sessionHostsRegionSection.resourceSkusApi.value, (sku) => contains(sku.name, steps('sessionHosts').sessionHostsSettingsSection.sessionHostSize)), (sku) => sku.locationInfo)), (sku) => sku.zones))), parse('[{\"label\":\"No infrastructure redundancy required\",\"value\":\"None\"}]'), parse('[{\"label\":\"Availability Zones\",\"value\":\"AvailabilityZones\"},{\"label\":\"No infrastructure redundancy required\",\"value\":\"None\"}]'))]"
+										"allowedValues": "[if(empty(first(map(filter(first(map(filter(steps('sessionHosts').sessionHostsRegionSection.resourceSkusApi.value, (sku) => equals(sku.name, steps('sessionHosts').sessionHostsSettingsSection.sessionHostSize)), (sku) => sku.locationInfo)), (info) => equals(info.location, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)), (info) => info.zones))), parse('[{\"label\":\"No infrastructure redundancy required\",\"value\":\"None\"}]'), parse('[{\"label\":\"Availability Zones\",\"value\":\"AvailabilityZones\"},{\"label\":\"No infrastructure redundancy required\",\"value\":\"None\"}]'))]"
 									}
 								},
 								{
@@ -1026,18 +1063,30 @@
 									"type": "Microsoft.Common.DropDown",
 									"label": "Select Availability Zones",
 									"defaultValue": [
-										"Zone 1",
-										"Zone 2",
-										"Zone 3"
+										{
+											"value": "1"
+										},
+										{
+											"value": "2"
+										}
 									],
 									"multiselect": true,
 									"selectAll": true,
 									"toolTip": "Select the desired Availability Zones",
 									"constraints": {
-										"allowedValues": "[map(first(map(first(map(filter(steps('sessionHosts').sessionHostsRegionSection.resourceSkusApi.value, (sku) => contains(sku.name, steps('sessionHosts').sessionHostsSettingsSection.sessionHostSize)), (sku) => sku.locationInfo)), (sku) => sku.zones)), (zone) => parse(concat('{\"label\":\"Zone ', zone, '\",\"value\":\"', zone, '\"}')))]",
+										"allowedValues": "[map(first(map(filter(first(map(filter(steps('sessionHosts').sessionHostsRegionSection.resourceSkusApi.value, (sku) => equals(sku.name, steps('sessionHosts').sessionHostsSettingsSection.sessionHostSize)), (sku) => sku.locationInfo)), (info) => equals(info.location, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)), (info) => info.zones)), (zone) => parse(concat('{\"label\":\"Zone ', zone, '\",\"value\":\"', zone, '\"}')))]",
 										"required": true
 									},
 									"visible": "[equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones')]"
+								},
+								{
+									"name": "availabilityZonesUnavailable",
+									"type": "Microsoft.Common.InfoBox",
+									"visible": "[equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'None')]",
+									"options": {
+										"style": "Warning",
+										"text": "Regional deployment is selected. Multiva's zones 1 and 2 default is not being used. If the selected VM size/region does not offer zones, select a supported size/region or explicitly accept regional deployment. Region-wide zone availability does not guarantee VM SKU availability, quota or capacity."
+									}
 								}
 							]
 						},
@@ -1122,7 +1171,7 @@
 									"type": "Microsoft.Solutions.ArmApiControl",
 									"request": {
 										"method": "GET",
-										"path": "[concat(steps('basics').resourceScope.subscription.id,'/providers/Microsoft.Storage/resourceTypes?api-version=2022-01-01')]"
+										"path": "[concat('/subscriptions/', steps('basics').subscription.subscriptionId, '/providers/Microsoft.Storage/resourceTypes?api-version=2022-01-01')]"
 									}
 								},
 								{
@@ -1133,7 +1182,7 @@
 									"toolTip": "Select to replicate storage across availability zones or only use local redundancy.",
 									"constraints": {
 										"required": true,
-										"allowedValues": "[if(not(empty(filter(filter(first(map(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceTypes) => equals(resourceTypes.resourceType, 'storageAccounts')), (item) => item.zoneMappings)), (item) => equals(length(item.zones), 3)), (item) => equals(toLower(replace(item.location, ' ', '')), if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name))))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":\"false\"},{\"label\":\"Zone-Redundant Storage\",\"value\":\"true\"}]'), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":\"false\"}]'))]"
+										"allowedValues": "[if(not(empty(filter(filter(first(map(filter(steps('storage').storageGeneralSettings.storageApi.value, (resourceTypes) => equals(resourceTypes.resourceType, 'storageAccounts')), (item) => item.zoneMappings)), (item) => equals(length(item.zones), 3)), (item) => equals(toLower(replace(item.location, ' ', '')), if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation))))), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":\"false\"},{\"label\":\"Zone-Redundant Storage\",\"value\":\"true\"}]'), parse('[{\"label\":\"Locally Redundant Storage\",\"value\":\"false\"}]'))]"
 									}
 								}
 							]
@@ -1148,7 +1197,6 @@
 									"name": "fslogixDeployment",
 									"type": "Microsoft.Common.CheckBox",
 									"label": "FSLogix profile management",
-									"defaultValue": true,
 									"toolTip": "Deploys FSLogix containers and session host setup for user's profiles."
 								},
 								{
@@ -1211,14 +1259,14 @@
 								{
 									"name": "appAttachStorageDeployment",
 									"type": "Microsoft.Common.CheckBox",
-									"visible": "[not(contains(steps('basics').resourceScope.location.name, 'china'))]",
+									"visible": "[not(contains(steps('basics').managementPlaneLocation, 'china'))]",
 									"label": "Create App Attach storage",
 									"toolTip": "Deploys App Attach containers and permissions setup."
 								},
 								{
 									"name": "appAttachStorageAccountSku",
 									"type": "Microsoft.Common.DropDown",
-									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').resourceScope.location.name, 'china')))]",
+									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').managementPlaneLocation, 'china')))]",
 									"label": "File share performance",
 									"filter": true,
 									"defaultValue": "Premium",
@@ -1242,7 +1290,7 @@
 								{
 									"name": "sessionHostsAppAttachFileShareQuota",
 									"type": "Microsoft.Common.Slider",
-									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').resourceScope.location.name, 'china')))]",
+									"visible": "[and(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), not(contains(steps('basics').managementPlaneLocation, 'china')))]",
 									"label": "File share size",
 									"subLabel": "x 100GB",
 									"toolTip": "Size of Azure File share quota, the maximum sizes are 5TB for standard SKU and 100TB for premium SKU",
@@ -1257,7 +1305,7 @@
 								{
 									"name": "appAttachStorageInfo",
 									"type": "Microsoft.Common.InfoBox",
-									"visible": "[contains(steps('basics').resourceScope.location.name, 'china')]",
+									"visible": "[contains(steps('basics').managementPlaneLocation, 'china')]",
 									"options": {
 										"text": "App Attach is currently NOT SUPPORTED in Azure China Cloud",
 										"style": "Warning"
@@ -1412,7 +1460,8 @@
 							"visible": "[steps('network').createAvdVirtualNetwork]",
 							"label": "vNet address range",
 							"toolTip": "Virtual network CIDR for Azure Virtual Desktop virtual machines and PaaS private endpoints",
-							"placeholder": "Example: 10.10.0.0/16",
+							"defaultValue": "10.131.0.0/16",
+							"placeholder": "Example: 10.131.0.0/16",
 							"constraints": {
 								"required": true,
 								"regex": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(?:\/(1[0-9]|2[0-4]))$",
@@ -1425,7 +1474,8 @@
 							"visible": "[steps('network').createAvdVirtualNetwork]",
 							"label": "Azure Virtual Desktop subnet address prefix",
 							"toolTip": "Virtual network subnet CIDR for Azure Virtual Desktop virtual machines",
-							"placeholder": "Example: 10.10.1.0/24",
+							"defaultValue": "10.131.17.0/24",
+							"placeholder": "Example: 10.131.17.0/24",
 							"constraints": {
 								"required": true,
 								"regex": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(?:\/(1[0-9]|2[0-4]))$",
@@ -1463,13 +1513,9 @@
 							"constraints": {
 								"required": true
 							},
-							"options": {
-								"filter": {
-									"subscription": "onBasics"
-								}
-							},
 							"scope": {
-								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name)]"
+								"subscriptionId": "[steps('basics').subscription.subscriptionId]",
+								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation)]"
 							}
 						},
 						{
@@ -1515,10 +1561,23 @@
 						},
 						{
 							"name": "deployAvdPrivateLinkService",
-							"type": "Microsoft.Common.CheckBox",
+							"type": "Microsoft.Common.OptionsGroup",
 							"label": "Private endpoints for AVD (Requires registration of resource provider)",
-							"defaultValue": false,
-							"toolTip": "Enables Private Endpoints for AVD Discovery and Connection. It is recommended to use Azure Private Endpoints to keep all traffic to PaaS services on the Azure backbone. <br/> Private Link Resource Provider Registration: <br/> <a href='https://learn.microsoft.com/en-us/azure/virtual-desktop/private-link-setup'>https://learn.microsoft.com/en-us/azure/virtual-desktop/private-link-setup</a>"
+							"defaultValue": "Enabled",
+							"toolTip": "Enables Private Endpoints for AVD Discovery and Connection. It is recommended to use Azure Private Endpoints to keep all traffic to PaaS services on the Azure backbone. <br/> Private Link Resource Provider Registration: <br/> <a href='https://learn.microsoft.com/en-us/azure/virtual-desktop/private-link-setup'>https://learn.microsoft.com/en-us/azure/virtual-desktop/private-link-setup</a>",
+							"constraints": {
+								"required": true,
+								"allowedValues": [
+									{
+										"label": "Enabled",
+										"value": true
+									},
+									{
+										"label": "Disabled",
+										"value": false
+									}
+								]
+							}
 						},
 						{
 							"name": "hostPoolPrivateEndpointNetworkAccessSelector",
@@ -1584,7 +1643,8 @@
 							"visible": "[and(equals(steps('network').createAvdVirtualNetwork, true), or(equals(steps('network').deployPrivateEndpointKeyvaultStorage, true), equals(steps('network').deployAvdPrivateLinkService, true)))]",
 							"label": "Private endpoint subnet address prefix",
 							"toolTip": "Virtual network subnet CIDR for private endpoints",
-							"placeholder": "Example: 10.10.2.0/27",
+							"defaultValue": "10.131.16.0/24",
+							"placeholder": "Example: 10.131.16.0/24",
 							"constraints": {
 								"required": true,
 								"regex": "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(?:\/(1[0-9]|2[0-7]))$",
@@ -1600,11 +1660,9 @@
 							"constraints": {
 								"required": true
 							},
-							"options": {
-								"filter": {
-									"subscription": "onBasics",
-									"location": "[steps('SessionHosts').SessionHostsRegionSection.SessionHostsRegion.location.displayName]"
-								}
+							"scope": {
+								"subscriptionId": "[steps('basics').subscription.subscriptionId]",
+								"location": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation)]"
 							}
 						},
 						{
@@ -1647,7 +1705,7 @@
 							"type": "Microsoft.Common.OptionsGroup",
 							"visible": "[or(steps('network').deployPrivateEndpointKeyvaultStorage, steps('network').deployAvdPrivateLinkService)]",
 							"label": "Azure private DNS zones",
-							"defaultValue": "Use existing",
+							"defaultValue": "Create new",
 							"toolTip": "It is recommended to use Azure private DNS zones for private endpoint name spaces, private endpoints will be automatically created for PaaS services (Azure Files and Key Vault) if enabled, but the private DNS zones are required for name resolution of private endpoint DNS records.",
 							"constraints": {
 								"required": true,
@@ -1734,6 +1792,7 @@
 						{
 							"name": "virtualNetworkPrivateDnsZoneSelection",
 							"type": "Microsoft.Common.Section",
+							"label": "Existing private DNS zones",
 							"visible": "[and(not(steps('network').virtualNetworkPrivateDnsZone), or(steps('network').deployPrivateEndpointKeyvaultStorage, steps('network').deployAvdPrivateLinkService))]",
 							"elements": [
 								{
@@ -1741,7 +1800,7 @@
 									"type": "Microsoft.Common.DropDown",
 									"label": "Private DNS Zone Subscription",
 									"placeholder": "",
-									"defaultValue": "[steps('basics').resourceScope.subscription.displayName]",
+									"defaultValue": "[steps('basics').subscription.displayName]",
 									"toolTip": "Select the subscription that contains your Private DNS Zones.",
 									"constraints": {
 										"allowedValues": "[map(steps('basics').subscriptionsApi.value, (sub) => parse(concat('{\"label\":\"', sub.displayName, '\",\"value\":{\"id\":\"', sub.id, '\",\"displayName\":\"', sub.displayName, '\"}}')))]",
@@ -1921,7 +1980,6 @@
 							"type": "Microsoft.Common.CheckBox",
 							"visible": true,
 							"label": "Deploy monitoring",
-							"defaultValue": true,
 							"toolTip": "Deploy monitoring settings and if selected deploy Azure log analytics workspace."
 						},
 						{
@@ -1951,11 +2009,11 @@
 							"visible": "[and(steps('monitoring').deployMonitoring, steps('monitoring').deployMonitoringAlaWorkspace)]",
 							"label": "Retention policy (Days)",
 							"toolTip": "Number of days data will be retained in the workspace.",
-							"defaultValue": 90,
+							"defaultValue": "90",
 							"constraints": {
 								"required": true,
-								"regex": "^[a-z0-9A-Z-]{1,90}$",
-								"validationMessage": "Value must be 1-90 characters."
+								"regex": "^(3[0-9]|[4-9][0-9]|[1-6][0-9]{2}|7[0-2][0-9]|730)$",
+								"validationMessage": "Enter a whole number of days between 30 and 730."
 							}
 						},
 						{
@@ -1964,6 +2022,9 @@
 							"visible": "[and(steps('monitoring').deployMonitoring, not(steps('monitoring').deployMonitoringAlaWorkspace))]",
 							"label": "Existing workspace",
 							"resourceType": "Microsoft.OperationalInsights/workspaces",
+							"scope": {
+								"subscriptionId": "[steps('basics').subscription.subscriptionId]"
+							},
 							"constraints": {
 								"required": true
 							}
@@ -1973,8 +2034,17 @@
 							"type": "Microsoft.Common.CheckBox",
 							"visible": "[steps('monitoring').deployMonitoring]",
 							"label": "Deploy monitoring policies (subscription level)",
-							"defaultValue": false,
-							"toolTip": "Deploy monitoring policy and policy set definitions to set diagnostic settings on new deployed resources."
+							"toolTip": "Creates policy and initiative definitions in the subscription, policy assignments and remediations in workload resource groups, and role assignments for the policy managed identities. Contributor alone is insufficient."
+						},
+						{
+							"name": "monitoringPolicyPermissions",
+							"type": "Microsoft.Common.InfoBox",
+							"visible": "[and(steps('monitoring').deployMonitoring, steps('monitoring').deployMonitoringPolicies)]",
+							"options": {
+								"style": "Warning",
+								"text": "The deployment identity needs subscription-level policyDefinitions/write and policySetDefinitions/write, plus policyAssignments/write, roleAssignments/write and Microsoft.PolicyInsights/remediations/write at the affected scopes. Owner, or approved least-privilege equivalents including Resource Policy Contributor and role-assignment permissions, are required. Missing permissions can cause AuthorizationFailed. This option is separate from configuring the monitoring workspace, data collection rule and VM agent.",
+								"uri": "https://learn.microsoft.com/azure/governance/policy/overview#azure-rbac-permissions-in-azure-policy"
+							}
 						},
 						{
 							"name": "deployMonitoringInfo1",
@@ -1999,7 +2069,7 @@
 						{
 							"name": "deployMonitoringInfo3",
 							"type": "Microsoft.Common.InfoBox",
-							"visible": "[contains(steps('basics').resourceScope.location.name, 'china')]",
+							"visible": "[contains(steps('basics').managementPlaneLocation, 'china')]",
 							"options": {
 								"text": "For Azure China deployment, Monitoring and Diagnostics is only supported in Chinaeast2 and Chinanorth3 regions",
 								"uri": "https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/?products=all&regions=china-non-regional%2Cchina-east%2Cchina-east-2%2Cchina-east-3%2Cchina-north%2Cchina-north-2%2Cchina-north-3&rar=true",
@@ -2492,19 +2562,6 @@
 										"regex": "^[a-z0-9A-Z-]{1,6}$",
 										"validationMessage": "Value must be 1-90 characters."
 									}
-								},
-								{
-									"name": "zeroTrustObjectsManagedIdentityCustomName",
-									"type": "Microsoft.Common.TextBox",
-									"label": "User assigned identity",
-									"visible": "[and(steps('resourceNaming').resourceNamingSelection, steps('sessionHosts').sessionHostsSettingsSection.sessionHostDiskZeroTrust)]",
-									"toolTip": "User assigned identity that enables server-side encryption and disables network access.",
-									"placeholder": "Example: id-zt",
-									"constraints": {
-										"required": true,
-										"regex": "^[a-z0-9A-Z-]{1,5}$",
-										"validationMessage": "Value must be 1-90 characters."
-									}
 								}
 							]
 						},
@@ -2760,9 +2817,9 @@
 				"deploymentPrefix": "[steps('basics').deploymentSpecs.deploymentPrefix]",
 				"deploymentEnvironment": "[steps('basics').deploymentSpecs.deploymentEnvironment]",
 				"diskZeroTrust": "[steps('sessionHosts').sessionHostsSettingsSection.sessionHostDiskZeroTrust]",
-				"avdManagementPlaneLocation": "[steps('basics').resourceScope.location.name]",
-				"avdSessionHostLocation": "[if(equals(steps('sessionHosts').deploySessionHosts, true), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name)]",
-				"avdWorkloadSubsId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+				"avdManagementPlaneLocation": "[steps('basics').managementPlaneLocation]",
+				"avdSessionHostLocation": "[if(equals(steps('sessionHosts').deploySessionHosts, true), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').managementPlaneLocation)]",
+				"avdWorkloadSubsId": "[steps('basics').subscription.subscriptionId]",
 				"avdHostPoolType": "[steps('managementPlane').managementPlaneHostPoolSettings.hostPoolType]",
 				"hostPoolPreferredAppGroupType": "[if(equals(steps('managementPlane').managementPlaneHostPoolSettings.hostPoolType, 'Pooled'), steps('managementPlane').managementPlaneAppGroupOptions.preferredAppGroupType, 'Desktop')]",
 				"avdHostPoolLoadBalancerType": "[steps('managementPlane').managementPlaneHostPoolSettings.loadBalancerType]",
@@ -2779,9 +2836,9 @@
 				"avdVmLocalUserName": "[steps('identity').identityLocalCredentials.identityLocalUserName]",
 				"avdVmLocalUserPassword": "[steps('identity').identityLocalCredentials.identityLocalUserPassword.password]",
 				"createAvdVnet": "[steps('network').createAvdVirtualNetwork]",
-				"avdVnetworkAddressPrefixes": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').virtualNetworkSize, '10.10.0.0/16')]",
-				"vNetworkAvdSubnetAddressPrefix": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').virtualNetworkAvdSubnetSize, '10.10.1.0/24')]",
-				"vNetworkPrivateEndpointSubnetAddressPrefix": "[if(and(equals(steps('network').createAvdVirtualNetwork, true), or(equals(steps('network').deployPrivateEndpointKeyvaultStorage, true), equals(steps('network').deployAvdPrivateLinkService, true))), steps('network').virtualNetworkPrivateEndpointSubnetSize, '10.10.2.0/27')]",
+				"avdVnetworkAddressPrefixes": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').virtualNetworkSize, '10.131.0.0/16')]",
+				"vNetworkAvdSubnetAddressPrefix": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').virtualNetworkAvdSubnetSize, '10.131.17.0/24')]",
+				"vNetworkPrivateEndpointSubnetAddressPrefix": "[if(and(equals(steps('network').createAvdVirtualNetwork, true), or(equals(steps('network').deployPrivateEndpointKeyvaultStorage, true), equals(steps('network').deployAvdPrivateLinkService, true))), steps('network').virtualNetworkPrivateEndpointSubnetSize, '10.131.16.0/24')]",
 				"customDnsIps": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').virtualNetworkDns, '')]",
 				"existingHubVnetResourceId": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').hubVirtualNetworkPeering.existingHubVirtualNetwork, '')]",
 				"vNetworkGatewayOnHub": "[if(equals(steps('network').createAvdVirtualNetwork, true), steps('network').hubVirtualNetworkPeering.hubVirtualNetworkGateway, false)]",
@@ -2789,12 +2846,12 @@
 				"existingVnetPrivateEndpointSubnetResourceId": "[if(equals(steps('network').createAvdVirtualNetwork, false), steps('network').virtualNetworkPrivateEndpointSubnetSelectorName, '')]",
 				"avdDeploySessionHosts": "[steps('sessionHosts').deploySessionHosts]",
 				"avdStartVmOnConnect": "[steps('managementPlane').managementPlaneHostPoolScaling.startVmOnConnect]",
-				"avdDeployScalingPlan": "[if(contains(steps('basics').resourceScope.location.name, 'china'), false, steps('managementPlane').managementPlaneHostPoolScaling.scalingPlan)]",
+				"avdDeployScalingPlan": "[if(contains(steps('basics').managementPlaneLocation, 'china'), false, steps('managementPlane').managementPlaneHostPoolScaling.scalingPlan)]",
 				"availability": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsAvailabilitySection.option, 'None')]",
-				"availabilityZones": "[if(and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones')), steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones, parse('[]'))]",
+				"availabilityZones": "[if(and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones')), map(if(startsWith(string(steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones), '['), steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones, split(string(steps('sessionHosts').sessionHostsAvailabilitySection.availabilityZones), ',')), (zone) => string(zone)), parse('[]'))]",
 				"zoneRedundantStorage": "[if(or(steps('storage').storageFslogix.fslogixDeployment, steps('storage').storageAppAttach.appAttachStorageDeployment), steps('storage').storageGeneralSettings.storageGeneralSettingsZoneRedundancy, false)]",
 				"avdDeploySessionHostsCount": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsSettingsSection.sessionHostsCount, 1)]",
-				"avdDeploySessionHostsIndex": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsSettingsSection.sessionHostsIndex, 1)]",
+				"avdSessionHostCountIndex": "[if(steps('sessionHosts').deploySessionHosts, steps('sessionHosts').sessionHostsSettingsSection.sessionHostsIndex, 1)]",
 				"useSharedImage": "[if(and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsOsSection.source, 'computegallery')), true, false)]",
 				"mpImageOffer": "[if(and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsOsSection.source, 'marketplace')), steps('sessionHosts').sessionHostsOsSection.offer, '')]",
 				"mpImageSku": "[if(and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsOsSection.source, 'marketplace')), steps('sessionHosts').sessionHostsOsSection.sku, '')]",
@@ -2820,7 +2877,7 @@
 				"createAvdFslogixDeployment": "[steps('storage').storageFslogix.fslogixDeployment]",
 				"fslogixStoragePerformance": "[if(equals(steps('storage').storageFslogix.fslogixDeployment, true), steps('storage').storageFslogix.fslogixStorageAccountSku, 'Premium')]",
 				"fslogixFileShareQuotaSize": "[if(equals(steps('storage').storageFslogix.fslogixDeployment, true), steps('storage').storageFslogix.sessionHostsFslogixFileShareQuota, 1 )]",
-				"createAppAttachDeployment": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), if(contains(steps('basics').resourceScope.location.name, 'china'), false, steps('storage').storageAppAttach.appAttachStorageDeployment), false)]",
+				"createAppAttachDeployment": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), if(contains(steps('basics').managementPlaneLocation, 'china'), false, steps('storage').storageAppAttach.appAttachStorageDeployment), false)]",
 				"appAttachStoragePerformance": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), steps('storage').storageAppAttach.appAttachStorageAccountSku, 'Premium')]",
 				"appAttachFileShareQuotaSize": "[if(equals(steps('storage').storageAppAttach.appAttachStorageDeployment, true), steps('storage').storageAppAttach.sessionHostsAppAttachFileShareQuota, 1 )]",
 				"storageOuPath": "[if(or(steps('storage').storageFslogix.fslogixDeployment, steps('storage').storageAppAttach.appAttachStorageDeployment), steps('storage').storageGeneralSettings.identityDomainOuPathStorageExisting, '')]",
@@ -2863,24 +2920,23 @@
 				"costCenterTag": "[if(equals(steps('resourceTagging').resourceTaggingSelection, true), steps('resourceTagging').resourceTags.tagsCostCenterTag, '')]",
 				"avdDeployMonitoring": "[steps('monitoring').deployMonitoring]",
 				"deployAlaWorkspace": "[if(equals(steps('monitoring').deployMonitoring, true), steps('monitoring').deployMonitoringAlaWorkspace, false)]",
-				"avdAlaWorkspaceDataRetention": "[if(equals(steps('monitoring').deployMonitoringAlaWorkspace, true), steps('monitoring').deployMonitoringNewAlaWorkspaceRetention, 0)]",
+				"avdAlaWorkspaceDataRetention": "[if(and(steps('monitoring').deployMonitoring, steps('monitoring').deployMonitoringAlaWorkspace), int(steps('monitoring').deployMonitoringNewAlaWorkspaceRetention), 0)]",
 				"alaExistingWorkspaceResourceId": "[if(equals(steps('monitoring').deployMonitoringAlaWorkspace, false), steps('monitoring').alaWorkspaceExistingWorkspacesSelection.id, '')]",
 				"deployCustomPolicyMonitoring": "[if(equals(steps('monitoring').deployMonitoring, true), steps('monitoring').deployMonitoringPolicies, false)]",
 				"avdMonitoringRgCustomName": "[if(equals(steps('resourceNaming').resourceNamingSelection, true), steps('resourceNaming').resourceNamingMonitoring.monitoringObjectsRgCustomName, '')]",
 				"avdAlaWorkspaceCustomName": "[if(equals(steps('resourceNaming').resourceNamingSelection, true), steps('resourceNaming').resourceNamingMonitoring.monitoringLogAnalyticsWorkspaceName, '')]",
 				"ztDiskEncryptionSetCustomNamePrefix": "[steps('resourceNaming').resourceNamingZeroTrust.zeroTrustObjectsDiskEncryptionSetCustomName]",
-				"ztKvPrefixCustomName ": "[steps('resourceNaming').resourceNamingZeroTrust.zeroTrustObjectsKeyVaultCustomPrefix]",
-				"ztManagedIdentityCustomName": "[steps('resourceNaming').resourceNamingZeroTrust.zeroTrustObjectsManagedIdentityCustomName]",
+				"ztKvPrefixCustomName": "[steps('resourceNaming').resourceNamingZeroTrust.zeroTrustObjectsKeyVaultCustomPrefix]",
 				"deployGpuPolicies": "[steps('sessionHosts').sessionHostsSettingsSection.gpuExtensionPolicy]",
-				"enableDef": "[steps('identity').identiyEnableDefOptions.enableDef]",
+				"deployDefender": "[steps('identity').identiyEnableDefOptions.enableDef]",
 				"enableDefForServers": "[if(equals(steps('identity').identiyEnableDefOptions.enableDef, true), steps('identity').identiyEnableDefOptions.enableDefForServers, false)]",
 				"enableDefForStorage": "[if(equals(steps('identity').identiyEnableDefOptions.enableDef, true), steps('identity').identiyEnableDefOptions.enableDefForStorage, false)]",
 				"enableDefForKeyVault": "[if(equals(steps('identity').identiyEnableDefOptions.enableDef, true), steps('identity').identiyEnableDefOptions.enableDefForKeyVault, false)]",
 				"enableDefForArm": "[if(equals(steps('identity').identiyEnableDefOptions.enableDef, true), steps('identity').identiyEnableDefOptions.enableDefForArm, false)]"
 			},
 			"kind": "Subscription",
-			"location": "[steps('basics').resourceScope.location.name]",
-			"subscriptionId": "[steps('basics').resourceScope.subscription.id]"
+			"location": "[steps('basics').managementPlaneLocation]",
+			"subscriptionId": "[steps('basics').subscription.subscriptionId]"
 		}
 	}
 }

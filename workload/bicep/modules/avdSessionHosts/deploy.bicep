@@ -329,6 +329,7 @@ module ama '../../../../avm/1.0.0/res/compute/virtual-machine/extension/main.bic
       enableAutomaticUpgrade: true
     }
     dependsOn: [
+      sessionHosts
       sessionHostsAntimalwareExtension
     ]
   }

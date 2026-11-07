@@ -1,5 +1,5 @@
-metadata name = 'AVD Accelerator - Baseline Deployment'
-metadata description = 'AVD Accelerator - Deployment Baseline'
+metadata name = 'AVD Accelerator - Multiva Baseline Deployment'
+metadata description = 'Multiva baseline with Mexico Central session hosts and East US 2 AVD service objects'
 metadata owner = 'Azure/avdaccelerator'
 
 targetScope = 'subscription'
@@ -26,11 +26,11 @@ param deploymentEnvironment string = 'Dev'
 @sys.description('This value is used to set the expiration date on the disk encryption key. (Default: 60)')
 param diskEncryptionKeyExpirationInDays int = 60
 
-@sys.description('Required. Location where to deploy compute services.')
-param avdSessionHostLocation string
+@sys.description('Location where to deploy compute services. (Default: mexicocentral)')
+param avdSessionHostLocation string = 'mexicocentral'
 
-@sys.description('Required. Location where to deploy AVD management plane.')
-param avdManagementPlaneLocation string
+@sys.description('Location where to deploy AVD management plane. AVD metadata is stored outside Mexico with this default. (Default: eastus2)')
+param avdManagementPlaneLocation string = 'eastus2'
 
 @sys.description('AVD workload subscription ID, multiple subscriptions scenario. (Default: "")')
 param avdWorkloadSubsId string
@@ -83,8 +83,8 @@ param avdOuPath string = ''
   'Personal'
   'Pooled'
 ])
-@sys.description('AVD host pool type. (Default: Pooled)')
-param avdHostPoolType string = 'Pooled'
+@sys.description('AVD host pool type. (Default: Personal)')
+param avdHostPoolType string = 'Personal'
 
 @sys.description('Optional. The type of preferred application group type, default to Desktop Application Group.')
 @allowed([
@@ -99,8 +99,8 @@ param hostPoolPreferredAppGroupType string = 'Desktop'
   'EnabledForClientsOnly' // Allows only clients to access AVD over public network
   'EnabledForSessionHostsOnly' // Allows only the session hosts to communicate over the public network
 ])
-@sys.description('Enables or Disables public network access on the host pool. (Default: Enabled.)')
-param hostPoolPublicNetworkAccess string = 'Enabled'
+@sys.description('Enables or Disables public network access on the host pool. Defaults to EnabledForClientsOnly with AVD private endpoints, otherwise Enabled.')
+param hostPoolPublicNetworkAccess string = deployAvdPrivateLinkService ? 'EnabledForClientsOnly' : 'Enabled'
 
 @allowed([
   'Disabled'
@@ -147,14 +147,14 @@ param existingVnetPrivateEndpointSubnetResourceId string = ''
 @sys.description('Existing hub virtual network for perring. (Default: "")')
 param existingHubVnetResourceId string = ''
 
-@sys.description('AVD virtual network address prefixes. (Default: 10.10.0.0/16)')
-param avdVnetworkAddressPrefixes string = '10.10.0.0/16'
+@sys.description('AVD virtual network address prefixes. (Default: 10.131.0.0/16)')
+param avdVnetworkAddressPrefixes string = '10.131.0.0/16'
 
-@sys.description('AVD virtual network subnet address prefix. (Default: 10.10.1.0/24)')
-param vNetworkAvdSubnetAddressPrefix string = '10.10.1.0/24'
+@sys.description('AVD virtual network subnet address prefix. (Default: 10.131.17.0/24)')
+param vNetworkAvdSubnetAddressPrefix string = '10.131.17.0/24'
 
-@sys.description('private endpoints virtual network subnet address prefix. (Default: 10.10.2.0/27)')
-param vNetworkPrivateEndpointSubnetAddressPrefix string = '10.10.2.0/27'
+@sys.description('private endpoints virtual network subnet address prefix. (Default: 10.131.16.0/24)')
+param vNetworkPrivateEndpointSubnetAddressPrefix string = '10.131.16.0/24'
 
 @sys.description('custom DNS servers IPs. (Default: "")')
 param customDnsIps string = ''
@@ -165,8 +165,8 @@ param deployDDoSNetworkProtection bool = false
 @sys.description('Deploy private endpoints for key vault and storage. (Default: true)')
 param deployPrivateEndpointKeyvaultStorage bool = true
 
-@sys.description('Deploys the private link for AVD. Requires resource provider registration or re-registration. (Default: false)')
-param deployAvdPrivateLinkService bool = false
+@sys.description('Deploys the private link for AVD. Requires resource provider registration or re-registration. (Default: true)')
+param deployAvdPrivateLinkService bool = true
 
 @sys.description('Create new  Azure private DNS zones for private endpoints. (Default: true)')
 param createPrivateDnsZones bool = true
@@ -186,8 +186,8 @@ param avdVnetPrivateDnsZoneKeyvaultId string = ''
 @sys.description('Does the hub contains a virtual network gateway. (Default: false)')
 param vNetworkGatewayOnHub bool = false
 
-@sys.description('Deploy Fslogix setup. (Default: true)')
-param createAvdFslogixDeployment bool = true
+@sys.description('Deploy Fslogix setup. (Default: false)')
+param createAvdFslogixDeployment bool = false
 
 @sys.description('Deploy App Attach setup. (Default: false)')
 param createAppAttachDeployment bool = false
@@ -229,20 +229,20 @@ param avdDeploySessionHostsCount int = 1
 @sys.description('The session host number to begin with for the deployment. This is important when adding virtual machines to host pool ensure the names do not conflict. (Default: 1)')
 param avdSessionHostCountIndex int = 1
 
-@sys.description('When true VMs are distributed across availability zones, when set to false, VMs will be deployed at regional level.')
+@sys.description('AvailabilityZones distributes VMs across the selected availability zones; None deploys VMs regionally. (Default: AvailabilityZones)')
 @allowed([
   'None'
   'AvailabilityZones'
 ])
-param availability string = 'None'
+param availability string = 'AvailabilityZones'
 
-@sys.description('The Availability Zones to use for the session hosts.')
+@sys.description('Array of availability zone identifiers for the session hosts, including when selecting just one zone. (Default: zones 1 and 2)')
 @allowed([
   '1'
   '2'
   '3'
 ])
-param availabilityZones array = ['1', '2', '3']
+param availabilityZones array = ['1', '2']
 
 @sys.description('When true, Zone Redundant Storage (ZRS) is used, when set to false, Locally Redundant Storage (LRS) is used. (Default: false)')
 param zoneRedundantStorage bool = false
@@ -301,11 +301,11 @@ param vTpmEnabled bool = true
 @sys.description('Set to deploy image from Azure Compute Gallery. (Default: false)')
 param useSharedImage bool = false
 
-@sys.description('AVD OS image offer. (Default: Office-365)')
-param mpImageOffer string = 'Office-365'
+@sys.description('AVD OS image offer. (Default: windows-11)')
+param mpImageOffer string = 'windows-11'
 
-@sys.description('AVD OS image SKU. (Default: win11-24h2-avd-m365)')
-param mpImageSku string = 'win11-24h2-avd-m365'
+@sys.description('AVD OS image SKU. (Default: win11-24h2-ent, Windows 11 Enterprise 24H2 single-session)')
+param mpImageSku string = 'win11-24h2-ent'
 
 @sys.description('Source custom image ID. (Default: "")')
 param avdCustomImageDefinitionId string = ''
@@ -671,7 +671,7 @@ var varZtKvPrivateEndpointName = 'pe-${varZtKvName}-vault'
 var varFslogixSharePath = createAvdFslogixDeployment
   ? '\\\\${varFslogixStorageName}.file.${environment().suffixes.storage}\\${varFslogixFileShareName}'
   : ''
-var varBaseScriptUri = 'https://raw.githubusercontent.com/azure/avdaccelerator/main/workload/'
+var varBaseScriptUri = 'https://raw.githubusercontent.com/gracielars999/avdaccelerator/main/workload/'
 var varSessionHostConfigurationScriptUri = '${varBaseScriptUri}scripts/Set-SessionHostConfiguration.ps1'
 var varSessionHostConfigurationScript = 'Set-SessionHostConfiguration.ps1'
 var varCreateStorageDeployment = (createAvdFslogixDeployment || varCreateAppAttachDeployment == true) ? true : false

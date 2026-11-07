@@ -1,5 +1,31 @@
 # Troubleshooting Guide: Azure Virtual Desktop Landing Zone Accelerator
 
+## Monitoring and subscription-level policies
+
+**Insufficient permissions can cause this option to fail, but a previous unspecified monitoring error cannot be attributed to RBAC without the failed operation.** The Multiva profile disables monitoring by explicit customer request, not as a workaround or proof that the failure is fixed.
+
+`Deploy monitoring` configures Log Analytics, diagnostic settings, a data collection rule and the Azure Monitor Agent. The separate **Deploy monitoring policies (subscription level)** option also creates the following:
+
+| Operation | Scope and required permission |
+|:--|:--|
+| Custom policy definitions | Subscription: `Microsoft.Authorization/policyDefinitions/write` |
+| Initiative definition | Subscription: `Microsoft.Authorization/policySetDefinitions/write` |
+| Policy assignments | Workload resource groups: `Microsoft.Authorization/policyAssignments/write` |
+| Grants for policy managed identities | Affected resource groups: `Microsoft.Authorization/roleAssignments/write` |
+| Per-policy remediation tasks | Workload resource groups: `Microsoft.PolicyInsights/remediations/write` |
+
+**Contributor alone is insufficient.** Owner at the required scopes, or an approved least-privilege combination, must cover both policy operations and role-assignment operations. Resource Policy Contributor covers policy management but does not replace the required RBAC role-assignment permissions. Owner only on a resource group does not permit subscription-level definition creation. Activate any required PIM roles before deployment and account for deny assignments and conditions. Turning off policy monitoring does not remove the role-assignment requirements of other baseline features.
+
+Policy remediation uses the **policy assignment's managed identity**, not the deployment user's identity. This source grants Monitoring Contributor and Log Analytics Contributor to those identities at the assignment resource groups. If using a Log Analytics workspace outside those scopes, have the administrator check the identity's effective access at the destination workspace as well. Do not expand permissions automatically.
+
+To establish the actual cause, collect the subscription/resource group and deployment name or ID, the **failed nested deployment operation's** error code, status message and target resource, and the deployment identity's effective roles/scopes at the time of failure. In Portal, open **Deployments > failed deployment > Operation details** and follow failures down to the innermost operation. For a remediation failure, include the policy assignment, its managed-identity principal ID, and the individual remediation error. Do not share credentials or access tokens.
+
+`AuthorizationFailed` or `LinkedAuthorizationFailed` naming one of the actions above is evidence for a permission issue; a generic `DeploymentFailed` is not. A missing initiative `policyDefinitionReferenceId` is a different error. This fork now creates one remediation per initiative child and target resource group, supplying that reference, and explicitly makes AMA wait for the session-host VM even when antimalware is disabled. These are source-level corrections, **not a confirmed diagnosis of the customer's original error**.
+
+When creating a monitoring workspace, the baseline uses the AVD management plane location (East US 2 for Multiva). The DCR follows the new or existing workspace's location. Validate workspace/DCR availability and inspect agent errors separately from policy/RBAC errors.
+
+Official references: [Azure Policy RBAC permissions](https://learn.microsoft.com/azure/governance/policy/overview#azure-rbac-permissions-in-azure-policy) and [remediation identities and permissions](https://learn.microsoft.com/azure/governance/policy/how-to/remediate-resources).
+
 ## Domain Join Failure
 
 When encountering a domain join failure in Azure Virtual Desktop, you may receive an error message similar to the following:
@@ -88,4 +114,3 @@ Active Directory Group Policies (GPOs) can significantly impact the deployment o
 |Security Policies   |  Overly strict GPO security policies can conflict with AVD Accelerator's recommended security configurations. | Review and adjust GPO security policies to align with AVD security requirements. Ensure that AVD-specific security recommendations are considered in your GPOs.  |
 |  DNS Configuration | GPOs may enforce DNS settings that are incompatible with Azure DNS and AVD requirements.  |  Ensure that DNS configurations in GPOs align with Azure DNS requirements and that DNS servers can resolve Azure and AVD-related hostnames. |
 | Organizational Unit (OU) Structure  |  Inappropriate placement of AVD virtual desktops in AD OUs with conflicting GPOs can lead to issues.  | Design an OU structure that isolates AVD virtual desktops or OU-link specific GPOs to the OUs where AVD desktops reside. Test GPO inheritance to ensure desired settings apply.   |
-

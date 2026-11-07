@@ -2,6 +2,8 @@
 
 ## AVD Accelerator Baseline
 
+This fork's commercial baseline uses the [Multiva defaults](../docs/deploy-baseline.md#multiva-defaults). Leave the region, network, image, Personal host pool, zone and monitoring parameters unset to use those defaults; supply real customer identity values and credentials. The examples below retain an explicitly selected identity provider for illustration, not as a Multiva identity decision. The subscription deployment's `-Location` / `--location` records deployment metadata and is distinct from both the AVD service-object and VM resource locations.
+
 ### Full Parameter Details
 
 A full list of parameter details can be found for the relevant deployment type here:
@@ -22,17 +24,17 @@ New-AzSubscriptionDeployment `
   -Location "<deployment-location>" `
   -TemplateFile "./workload/bicep/deploy-baseline.bicep" `
   -avdWorkloadSubsId $SubID `
-  -avdSessionHostLocation "<session-host-location>" `
-  -avdManagementPlaneLocation "<management-plane-location>" `
+  -avdSessionHostLocation "mexicocentral" `
+  -avdManagementPlaneLocation "eastus2" `
   -avdVmLocalUserName "<local-username>" `
   -avdVmLocalUserPassword $avdVmLocalUserPassword `
   -avdIdentityServiceProvider "EntraIDKerberos" `
   -identityDomainName "<domain-name>" `
   -avdServicePrincipalObjectId "<object-id>" `
   -avdSecurityGroups @(@{objectId="00000000-0000-0000-0000-000000000000"; displayName="Example-Security-Group"}) `
-  -avdVnetworkAddressPrefixes "10.10.0.0/16" `
-  -vNetworkAvdSubnetAddressPrefix "10.10.1.0/24" `
-  -vNetworkPrivateEndpointSubnetAddressPrefix "10.10.2.0/27"
+  -avdVnetworkAddressPrefixes "10.131.0.0/16" `
+  -vNetworkAvdSubnetAddressPrefix "10.131.17.0/24" `
+  -vNetworkPrivateEndpointSubnetAddressPrefix "10.131.16.0/24"
 ```
 > Note: above PowerShell deployment sample, deploys AVD with most of the default options in the AVD LZA using  Entra ID Kerberos as identity provider and deploying new virtual network.
 
@@ -51,19 +53,31 @@ az deployment sub create `
 --template-file "./workload/bicep/deploy-baseline.bicep" `
 --parameters `
   avdWorkloadSubsId "$SubID" `
-  avdSessionHostLocation "<session-host-location>" `
-  avdManagementPlaneLocation "<management-plane-location>" `
+  avdSessionHostLocation "mexicocentral" `
+  avdManagementPlaneLocation "eastus2" `
   avdVmLocalUserName "<local-username>" `
   avdVmLocalUserPassword "$avdVmLocalUserPassword" `
   avdIdentityServiceProvider "EntraIDKerberos" `
   identityDomainName "<domain-name>" `
   avdServicePrincipalObjectId "<object-id>" `
   avdSecurityGroups @(@{objectId="00000000-0000-0000-0000-000000000000"; displayName="Example-Security-Group"}) `
-  avdVnetworkAddressPrefixes "10.10.0.0/16" `
-  vNetworkAvdSubnetAddressPrefix "10.10.1.0/24" `
-  vNetworkPrivateEndpointSubnetAddressPrefix "10.10.2.0/27"
+  avdVnetworkAddressPrefixes "10.131.0.0/16" `
+  vNetworkAvdSubnetAddressPrefix "10.131.17.0/24" `
+  vNetworkPrivateEndpointSubnetAddressPrefix "10.131.16.0/24"
 ```
 > Note: above AZ CLI deployment sample, deploys AVD with most of the default options in the AVD LZA using  Entra ID Kerberos as identity provider and deploying new virtual network.
+
+### Local contract checks
+
+After regenerating `workload/arm/deploy-baseline.json` from Bicep, run the focused tests from the repository root:
+
+```powershell
+node --test .\workload\tests\deploy-baseline.test.cjs
+```
+
+These execute the saved form expressions against offline fixtures and inspect the compiled template. They do not deploy resources or replace a signed-in Portal sandbox test, subscription-specific SKU/capacity checks, or an authorized customer deployment.
+
+The published 2021 form schema does not include the multi-select default array shape documented by the current [DropDown reference](https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/microsoft-common-dropdown). Other inherited legacy controls also produce strict-schema errors. Validation of the changed control contracts is not a full-form schema pass; live Portal verification remains required before production use.
 
 ## Optional: Custom Image Build deployment
 

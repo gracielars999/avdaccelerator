@@ -1,10 +1,10 @@
-using './deploy-baseline.bicep'
+using '../deploy-baseline.bicep'
 
 param deploymentPrefix = 'AVD1'
 param deploymentEnvironment = 'Dev'
 param diskEncryptionKeyExpirationInDays = 60
-param avdSessionHostLocation = ''
-param avdManagementPlaneLocation = ''
+param avdSessionHostLocation = 'mexicocentral'
+param avdManagementPlaneLocation = 'eastus2'
 param avdWorkloadSubsId = ''
 param avdServicePrincipalObjectId = ''
 param avdArmServicePrincipalObjectId = ''
@@ -18,9 +18,9 @@ param identityDomainGuid = ''
 param avdDomainJoinUserName = 'none'
 param avdDomainJoinUserPassword = 'none'
 param avdOuPath = ''
-param avdHostPoolType = 'Pooled'
+param avdHostPoolType = 'Personal'
 param hostPoolPreferredAppGroupType = 'Desktop'
-param hostPoolPublicNetworkAccess = 'Enabled'
+param hostPoolPublicNetworkAccess = 'EnabledForClientsOnly'
 param workspacePublicNetworkAccess = 'Enabled'
 param avdPersonalAssignType = 'Automatic'
 param avdHostPoolLoadBalancerType = 'BreadthFirst'
@@ -32,20 +32,20 @@ param createAvdVnet = true
 param existingVnetAvdSubnetResourceId = ''
 param existingVnetPrivateEndpointSubnetResourceId = ''
 param existingHubVnetResourceId = ''
-param avdVnetworkAddressPrefixes = '10.10.0.0/16'
-param vNetworkAvdSubnetAddressPrefix = '10.10.1.0/24'
-param vNetworkPrivateEndpointSubnetAddressPrefix = '10.10.2.0/27'
+param avdVnetworkAddressPrefixes = '10.131.0.0/16'
+param vNetworkAvdSubnetAddressPrefix = '10.131.17.0/24'
+param vNetworkPrivateEndpointSubnetAddressPrefix = '10.131.16.0/24'
 param customDnsIps = ''
 param deployDDoSNetworkProtection = false
 param deployPrivateEndpointKeyvaultStorage = true
-param deployAvdPrivateLinkService = false
+param deployAvdPrivateLinkService = true
 param createPrivateDnsZones = true
 param avdVnetPrivateDnsZoneConnectionResourceId = ''
 param avdVnetPrivateDnsZoneDiscoveryResourceId = ''
 param avdVnetPrivateDnsZoneFilesId = ''
 param avdVnetPrivateDnsZoneKeyvaultId = ''
 param vNetworkGatewayOnHub = false
-param createAvdFslogixDeployment = true
+param createAvdFslogixDeployment = false
 param createAppAttachDeployment = false
 param fslogixFileShareQuotaSize = 1
 param appAttachFileShareQuotaSize = 1
@@ -58,11 +58,10 @@ param avdAlaWorkspaceDataRetention = 90
 param alaExistingWorkspaceResourceId = ''
 param avdDeploySessionHostsCount = 1
 param avdSessionHostCountIndex = 1
-param availability = 'None'
+param availability = 'AvailabilityZones'
 param availabilityZones = [
   '1'
   '2'
-  '3'
 ]
 param zoneRedundantStorage = false
 param fslogixStoragePerformance = 'Premium'
@@ -76,8 +75,8 @@ param securityType = 'TrustedLaunch'
 param secureBootEnabled = true
 param vTpmEnabled = true
 param useSharedImage = false
-param mpImageOffer = 'Office-365'
-param mpImageSku = 'win11-24h2-avd-m365'
+param mpImageOffer = 'windows-11'
+param mpImageSku = 'win11-24h2-ent'
 param avdCustomImageDefinitionId = ''
 param managementVmOsImage = 'winServer_2022_Datacenter_smalldisk_g2'
 param storageOuPath = ''
@@ -122,7 +121,6 @@ param workloadSlaTag = 'Contoso-SLA'
 param opsTeamTag = 'workload-admins@Contoso.com'
 param ownerTag = 'workload-owner@Contoso.com'
 param costCenterTag = 'Contoso-CC'
-param time = ? /* TODO : please fix the value assigned to this parameter `utcNow()` */
 param enableTelemetry = true
 param enableKvPurgeProtection = true
 param deployAntiMalwareExt = true
@@ -132,4 +130,3 @@ param enableDefForServers = true
 param enableDefForStorage = true
 param enableDefForKeyVault = true
 param enableDefForArm = true
-

@@ -1,6 +1,6 @@
-# AVD Accelerator - Baseline Deployment
+# AVD Accelerator - Multiva Baseline Deployment
 
-AVD Accelerator - Deployment Baseline
+Multiva baseline with Mexico Central session hosts and East US 2 AVD service objects
 
 ## Parameters
 
@@ -9,9 +9,9 @@ Parameter name | Required | Description
 deploymentPrefix | No       | The name of the resource group to deploy. (Default: AVD1)
 deploymentEnvironment | No       | The name of the resource group to deploy. (Default: Dev)
 diskEncryptionKeyExpirationInDays | No       | This value is used to set the expiration date on the disk encryption key. (Default: 60)
-avdSessionHostLocation | Yes      | Required. Location where to deploy compute services.
-avdManagementPlaneLocation | Yes      | Required. Location where to deploy AVD management plane.
-avdWorkloadSubsId | No       | AVD workload subscription ID, multiple subscriptions scenario. (Default: "")
+avdSessionHostLocation | No       | Location where to deploy compute services. (Default: mexicocentral)
+avdManagementPlaneLocation | No       | Location where to deploy AVD management plane. AVD metadata is stored outside Mexico with this default. (Default: eastus2)
+avdWorkloadSubsId | Yes      | AVD workload subscription ID, multiple subscriptions scenario. (Default: "")
 avdServicePrincipalObjectId | No       | Azure Virtual Desktop Enterprise Application object ID (Enterprise app name: Azure Virtual Desktop) . (Default: "")
 avdArmServicePrincipalObjectId | No       | Azure Virtual Desktop ARM Enterprise Application Object Id (Enterprise app name: Azure Virtual Desktop ARM Provider). Required for the deployment of App Attach File Share with EntraID identity provider. (Default: "")
 avdVmLocalUserName | Yes      | AVD session host local username.
@@ -24,9 +24,9 @@ identityDomainGuid | No       | GUID of on-premises AD domain, used for FSLogix 
 avdDomainJoinUserName | No       | AVD session host domain join user principal name. (Default: "none")
 avdDomainJoinUserPassword | No       | AVD session host domain join password. (Default: "none")
 avdOuPath      | No       | OU path to join AVd VMs. (Default: "")
-avdHostPoolType | No       | AVD host pool type. (Default: Pooled)
+avdHostPoolType | No       | AVD host pool type. (Default: Personal)
 hostPoolPreferredAppGroupType | No       | Optional. The type of preferred application group type, default to Desktop Application Group.
-hostPoolPublicNetworkAccess | No       | Enables or Disables public network access on the host pool. (Default: Enabled.)
+hostPoolPublicNetworkAccess | No       | Enables or Disables public network access on the host pool. Defaults to EnabledForClientsOnly with AVD private endpoints, otherwise Enabled.
 workspacePublicNetworkAccess | No       | Default to Enabled. Enables or Disables public network access on the workspace.
 avdPersonalAssignType | No       | AVD host pool type. (Default: Automatic)
 avdHostPoolLoadBalancerType | No       | AVD host pool load balacing type. (Default: BreadthFirst)
@@ -38,20 +38,20 @@ createAvdVnet  | No       | Create new virtual network. (Default: true)
 existingVnetAvdSubnetResourceId | No       | Existing virtual network subnet for AVD. (Default: "")
 existingVnetPrivateEndpointSubnetResourceId | No       | Existing virtual network subnet for private endpoints. (Default: "")
 existingHubVnetResourceId | No       | Existing hub virtual network for perring. (Default: "")
-avdVnetworkAddressPrefixes | No       | AVD virtual network address prefixes. (Default: 10.10.0.0/16)
-vNetworkAvdSubnetAddressPrefix | No       | AVD virtual network subnet address prefix. (Default: 10.10.1.0/24)
-vNetworkPrivateEndpointSubnetAddressPrefix | No       | private endpoints virtual network subnet address prefix. (Default: 10.10.2.0/27)
+avdVnetworkAddressPrefixes | No       | AVD virtual network address prefixes. (Default: 10.131.0.0/16)
+vNetworkAvdSubnetAddressPrefix | No       | AVD virtual network subnet address prefix. (Default: 10.131.17.0/24)
+vNetworkPrivateEndpointSubnetAddressPrefix | No       | private endpoints virtual network subnet address prefix. (Default: 10.131.16.0/24)
 customDnsIps   | No       | custom DNS servers IPs. (Default: "")
 deployDDoSNetworkProtection | No       | Deploy DDoS Network Protection for virtual network. (Default: true)
 deployPrivateEndpointKeyvaultStorage | No       | Deploy private endpoints for key vault and storage. (Default: true)
-deployAvdPrivateLinkService | No       | Deploys the private link for AVD. Requires resource provider registration or re-registration. (Default: false)
+deployAvdPrivateLinkService | No       | Deploys the private link for AVD. Requires resource provider registration or re-registration. (Default: true)
 createPrivateDnsZones | No       | Create new  Azure private DNS zones for private endpoints. (Default: true)
 avdVnetPrivateDnsZoneConnectionResourceId | No       | The ResourceID of the AVD Private DNS Zone for Connection. (privatelink.wvd.azure.com). Only required if createPrivateDNSZones is set to false.
 avdVnetPrivateDnsZoneDiscoveryResourceId | No       | The ResourceID of the AVD Private DNS Zone for Discovery. (privatelink-global.wvd.azure.com). Only required if createPrivateDNSZones is set to false.
 avdVnetPrivateDnsZoneFilesId | No       | Use existing Azure private DNS zone for Azure files. (Default: "")
 avdVnetPrivateDnsZoneKeyvaultId | No       | Use existing Azure private DNS zone for key vault privatelink.vaultcore.azure.net or privatelink.vaultcore.usgovcloudapi.net. (Default: "")
 vNetworkGatewayOnHub | No       | Does the hub contains a virtual network gateway. (Default: false)
-createAvdFslogixDeployment | No       | Deploy Fslogix setup. (Default: true)
+createAvdFslogixDeployment | No       | Deploy Fslogix setup. (Default: false)
 createAppAttachDeployment | No       | Deploy App Attach setup. (Default: false)
 fslogixFileShareQuotaSize | No       | Fslogix file share size. (Default: 1)
 appAttachFileShareQuotaSize | No       | App Attach file share size. (Default: 1)
@@ -63,9 +63,9 @@ deployCustomPolicyMonitoring | No       | Create and assign custom Azure Policy 
 avdAlaWorkspaceDataRetention | No       | AVD Azure log analytics workspace data retention. (Default: 90)
 alaExistingWorkspaceResourceId | No       | Existing Azure log analytics workspace resource ID to connect to. (Default: "")
 avdDeploySessionHostsCount | No       | Quantity of session hosts to deploy. (Default: 1)
-avdSessionHostCountIndex | No       | The session host number to begin with for the deployment. This is important when adding virtual machines to ensure the names do not conflict. (Default: 1)
-availability   | No       | When true VMs are distributed across availability zones, when set to false, VMs will be deployed at regional level.
-availabilityZones | No       | The Availability Zones to use for the session hosts.
+avdSessionHostCountIndex | No       | The session host number to begin with for the deployment. This is important when adding virtual machines to host pool ensure the names do not conflict. (Default: 1)
+availability   | No       | AvailabilityZones distributes VMs across the selected availability zones; None deploys VMs regionally. (Default: AvailabilityZones)
+availabilityZones | No       | Array of availability zone identifiers for the session hosts, including when selecting just one zone. (Default: zones 1 and 2)
 zoneRedundantStorage | No       | When true, Zone Redundant Storage (ZRS) is used, when set to false, Locally Redundant Storage (LRS) is used. (Default: false)
 fslogixStoragePerformance | No       | Storage account SKU for FSLogix storage. Recommended tier is Premium (Default: Premium)
 appAttachStoragePerformance | No       | Storage account SKU for App Attach storage. Recommended tier is Premium. (Default: Premium)
@@ -78,8 +78,8 @@ securityType   | No       | Specifies the securityType of the virtual machine. "
 secureBootEnabled | No       | Specifies whether secure boot should be enabled on the virtual machine. This parameter is part of the UefiSettings. securityType should be set to TrustedLaunch or ConfidentialVM to enable UefiSettings. (Default: true)
 vTpmEnabled    | No       | Specifies whether vTPM should be enabled on the virtual machine. This parameter is part of the UefiSettings. securityType should be set to TrustedLaunch or ConfidentialVM to enable UefiSettings. (Default: true)
 useSharedImage | No       | Set to deploy image from Azure Compute Gallery. (Default: false)
-mpImageOffer   | No       | AVD OS image offer. (Default: Office-365)
-mpImageSku     | No       | AVD OS image SKU. (Default: win11-24h2-avd-m365)
+mpImageOffer   | No       | AVD OS image offer. (Default: windows-11)
+mpImageSku     | No       | AVD OS image SKU. (Default: win11-24h2-ent, Windows 11 Enterprise 24H2 single-session)
 avdCustomImageDefinitionId | No       | Source custom image ID. (Default: "")
 managementVmOsImage | No       | Management VM image SKU (Default: winServer_2022_Datacenter_smalldisk_g2)
 storageOuPath  | No       | OU name for Azure Storage Account. It is recommended to create a new AD Organizational Unit (OU) in AD and disable password expiration policy on computer accounts or service logon accounts accordingly.  (Default: "")
@@ -163,19 +163,23 @@ This value is used to set the expiration date on the disk encryption key. (Defau
 
 ### avdSessionHostLocation
 
-![Parameter Setting](https://img.shields.io/badge/parameter-required-orange?style=flat-square)
+![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Required. Location where to deploy compute services.
+Location where to deploy compute services. (Default: mexicocentral)
+
+- Default value: `mexicocentral`
 
 ### avdManagementPlaneLocation
 
-![Parameter Setting](https://img.shields.io/badge/parameter-required-orange?style=flat-square)
+![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Required. Location where to deploy AVD management plane.
+Location where to deploy AVD management plane. AVD metadata is stored outside Mexico with this default. (Default: eastus2)
+
+- Default value: `eastus2`
 
 ### avdWorkloadSubsId
 
-![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
+![Parameter Setting](https://img.shields.io/badge/parameter-required-orange?style=flat-square)
 
 AVD workload subscription ID, multiple subscriptions scenario. (Default: "")
 
@@ -267,9 +271,9 @@ OU path to join AVd VMs. (Default: "")
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD host pool type. (Default: Pooled)
+AVD host pool type. (Default: Personal)
 
-- Default value: `Pooled`
+- Default value: `Personal`
 
 - Allowed values: `Personal`, `Pooled`
 
@@ -287,9 +291,9 @@ Optional. The type of preferred application group type, default to Desktop Appli
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Enables or Disables public network access on the host pool. (Default: Enabled.)
+Enables or Disables public network access on the host pool. Defaults to EnabledForClientsOnly with AVD private endpoints, otherwise Enabled.
 
-- Default value: `Enabled`
+- Default value: `[if(parameters('deployAvdPrivateLinkService'), 'EnabledForClientsOnly', 'Enabled')]`
 
 - Allowed values: `Disabled`, `Enabled`, `EnabledForClientsOnly`, `EnabledForSessionHostsOnly`
 
@@ -385,25 +389,25 @@ Existing hub virtual network for perring. (Default: "")
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD virtual network address prefixes. (Default: 10.10.0.0/16)
+AVD virtual network address prefixes. (Default: 10.131.0.0/16)
 
-- Default value: `10.10.0.0/16`
+- Default value: `10.131.0.0/16`
 
 ### vNetworkAvdSubnetAddressPrefix
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD virtual network subnet address prefix. (Default: 10.10.1.0/24)
+AVD virtual network subnet address prefix. (Default: 10.131.17.0/24)
 
-- Default value: `10.10.1.0/24`
+- Default value: `10.131.17.0/24`
 
 ### vNetworkPrivateEndpointSubnetAddressPrefix
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-private endpoints virtual network subnet address prefix. (Default: 10.10.2.0/27)
+private endpoints virtual network subnet address prefix. (Default: 10.131.16.0/24)
 
-- Default value: `10.10.2.0/27`
+- Default value: `10.131.16.0/24`
 
 ### customDnsIps
 
@@ -431,9 +435,9 @@ Deploy private endpoints for key vault and storage. (Default: true)
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Deploys the private link for AVD. Requires resource provider registration or re-registration. (Default: false)
+Deploys the private link for AVD. Requires resource provider registration or re-registration. (Default: true)
 
-- Default value: `False`
+- Default value: `True`
 
 ### createPrivateDnsZones
 
@@ -479,9 +483,9 @@ Does the hub contains a virtual network gateway. (Default: false)
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Deploy Fslogix setup. (Default: true)
+Deploy Fslogix setup. (Default: false)
 
-- Default value: `True`
+- Default value: `False`
 
 ### createAppAttachDeployment
 
@@ -573,7 +577,7 @@ Quantity of session hosts to deploy. (Default: 1)
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-The session host number to begin with for the deployment. This is important when adding virtual machines to ensure the names do not conflict. (Default: 1)
+The session host number to begin with for the deployment. This is important when adding virtual machines to host pool ensure the names do not conflict. (Default: 1)
 
 - Default value: `1`
 
@@ -581,9 +585,9 @@ The session host number to begin with for the deployment. This is important when
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-When true VMs are distributed across availability zones, when set to false, VMs will be deployed at regional level.
+AvailabilityZones distributes VMs across the selected availability zones; None deploys VMs regionally. (Default: AvailabilityZones)
 
-- Default value: `None`
+- Default value: `AvailabilityZones`
 
 - Allowed values: `None`, `AvailabilityZones`
 
@@ -591,9 +595,9 @@ When true VMs are distributed across availability zones, when set to false, VMs 
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-The Availability Zones to use for the session hosts.
+Array of availability zone identifiers for the session hosts, including when selecting just one zone. (Default: zones 1 and 2)
 
-- Default value: `1 2 3`
+- Default value: `1 2`
 
 - Allowed values: `1`, `2`, `3`
 
@@ -706,17 +710,17 @@ Set to deploy image from Azure Compute Gallery. (Default: false)
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD OS image offer. (Default: Office-365)
+AVD OS image offer. (Default: windows-11)
 
-- Default value: `Office-365`
+- Default value: `windows-11`
 
 ### mpImageSku
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD OS image SKU. (Default: win11-24h2-avd-m365)
+AVD OS image SKU. (Default: win11-24h2-ent, Windows 11 Enterprise 24H2 single-session)
 
-- Default value: `win11-24h2-avd-m365`
+- Default value: `win11-24h2-ent`
 
 ### avdCustomImageDefinitionId
 
@@ -1159,7 +1163,7 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
     "contentVersion": "1.0.0.0",
     "metadata": {
-        "template": "workload/bicep/deploy-baseline.json"
+        "template": "workload/arm/deploy-baseline.json"
     },
     "parameters": {
         "deploymentPrefix": {
@@ -1172,10 +1176,10 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": 60
         },
         "avdSessionHostLocation": {
-            "value": ""
+            "value": "mexicocentral"
         },
         "avdManagementPlaneLocation": {
-            "value": ""
+            "value": "eastus2"
         },
         "avdWorkloadSubsId": {
             "value": ""
@@ -1227,13 +1231,13 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": ""
         },
         "avdHostPoolType": {
-            "value": "Pooled"
+            "value": "Personal"
         },
         "hostPoolPreferredAppGroupType": {
             "value": "Desktop"
         },
         "hostPoolPublicNetworkAccess": {
-            "value": "Enabled"
+            "value": "[if(parameters('deployAvdPrivateLinkService'), 'EnabledForClientsOnly', 'Enabled')]"
         },
         "workspacePublicNetworkAccess": {
             "value": "Enabled"
@@ -1269,13 +1273,13 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": ""
         },
         "avdVnetworkAddressPrefixes": {
-            "value": "10.10.0.0/16"
+            "value": "10.131.0.0/16"
         },
         "vNetworkAvdSubnetAddressPrefix": {
-            "value": "10.10.1.0/24"
+            "value": "10.131.17.0/24"
         },
         "vNetworkPrivateEndpointSubnetAddressPrefix": {
-            "value": "10.10.2.0/27"
+            "value": "10.131.16.0/24"
         },
         "customDnsIps": {
             "value": ""
@@ -1287,7 +1291,7 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": true
         },
         "deployAvdPrivateLinkService": {
-            "value": false
+            "value": true
         },
         "createPrivateDnsZones": {
             "value": true
@@ -1308,7 +1312,7 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": false
         },
         "createAvdFslogixDeployment": {
-            "value": true
+            "value": false
         },
         "createAppAttachDeployment": {
             "value": false
@@ -1347,13 +1351,12 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": 1
         },
         "availability": {
-            "value": "None"
+            "value": "AvailabilityZones"
         },
         "availabilityZones": {
             "value": [
                 "1",
-                "2",
-                "3"
+                "2"
             ]
         },
         "zoneRedundantStorage": {
@@ -1393,10 +1396,10 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": false
         },
         "mpImageOffer": {
-            "value": "Office-365"
+            "value": "windows-11"
         },
         "mpImageSku": {
-            "value": "win11-24h2-avd-m365"
+            "value": "win11-24h2-ent"
         },
         "avdCustomImageDefinitionId": {
             "value": ""

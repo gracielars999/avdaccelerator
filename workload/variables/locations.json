@@ -139,6 +139,11 @@
         "timeDifference": "+9:00",
         "timeZone": "Korea Standard Time"
     },
+    "mexicocentral": {
+        "acronym": "mxc",
+        "timeDifference": "-6:00",
+        "timeZone": "Central Standard Time (Mexico)"
+    },
     "northcentralus": {
         "acronym": "usnc",
         "timeDifference": "-6:00",

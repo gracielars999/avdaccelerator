@@ -147,6 +147,12 @@ var varCustomPolicySetDefinitions = {
   ]
 }
 
+var varPolicyDefinitionCount = length(varCustomPolicySetDefinitions.libSetChildDefinitions)
+var varPolicyRemediations = [for i in range(0, length(varPolicyAssignmentRgs) * varPolicyDefinitionCount): {
+  rgName: varPolicyAssignmentRgs[i / varPolicyDefinitionCount].rgName
+  definitionReferenceId: varCustomPolicySetDefinitions.libSetChildDefinitions[i % varPolicyDefinitionCount].definitionReferenceId
+}]
+
 // =========== //
 // Deployments //
 // =========== //
@@ -215,13 +221,17 @@ module policySetAssignment '../../../../avm/1.0.0/ptn/authorization/policy-assig
 }]
 
 // Policy set remediation.
-module policySetRemediation '../../../../avm/1.0.0/ptn/policy-insights/remediation/modules/resource-group.bicep' = [for (policyAssignmentRg, i) in varPolicyAssignmentRgs: {
-  scope: resourceGroup('${subscriptionId}', '${policyAssignmentRg.rgName}')
+module policySetRemediation '../../../../avm/1.0.0/ptn/policy-insights/remediation/modules/resource-group.bicep' = [for (remediation, i) in varPolicyRemediations: {
+  scope: resourceGroup('${subscriptionId}', '${remediation.rgName}')
   name: 'Remm-Diag-${varCustomPolicySetDefinitions.deploymentName}-${i}'
   params: {
     name: '${varCustomPolicySetDefinitions.deploymentName}-${i}'
-    policyAssignmentId: policySetAssignment[i].outputs.resourceId
-}
+    policyAssignmentId: resourceId(subscriptionId, remediation.rgName, 'Microsoft.Authorization/policyAssignments', varCustomPolicySetDefinitions.libSetDefinition.name)
+    policyDefinitionReferenceId: remediation.definitionReferenceId
+  }
+  dependsOn: [
+    policySetAssignment
+  ]
 }]
 
 // =========== //

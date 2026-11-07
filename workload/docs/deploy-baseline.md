@@ -1,12 +1,42 @@
 # Azure Virtual Desktop LZA - Baseline - Deployment walk through
 
+## Multiva defaults
+
+The commercial baseline in this fork is the Multiva-specific version of the upstream accelerator. Use its **Deploy to Azure** button, which loads both `workload/arm/deploy-baseline.json` and `workload/portal-ui/portal-ui-baseline.json` from `gracielars999/avdaccelerator`. Opening only the template in the generic custom-template editor bypasses the custom form and its availability-zone output normalization.
+
+| Setting | Default |
+|:--|:--|
+| AVD service objects / management plane | East US 2 (`eastus2`) |
+| Session hosts and workload network | Mexico Central (`mexicocentral`) |
+| Host pool | Personal, automatic assignment |
+| Image | Marketplace, `MicrosoftWindowsDesktop/windows-11/win11-24h2-ent`, latest image version |
+| OS disk | Premium |
+| Availability | Zones 1 and 2, when offered for the selected VM size and region |
+| FSLogix | Disabled |
+| Virtual network | New, `10.131.0.0/16` |
+| AVD subnet | `10.131.17.0/24` |
+| Private endpoint subnet | `10.131.16.0/24` |
+| AVD private endpoints | Enabled |
+| Private DNS zones | Create new |
+| Monitoring | Disabled by explicit customer request |
+
+The existing VM size (`Standard_D4ads_v5`), VM count (**1**), and other unrelated source defaults are unchanged. The Portal size selector retains that size as its first recommendation; select a size available in the customer's subscription. Selecting two zones does not create two VMs: increase the VM count to at least two to place hosts in both zones. Hosts are distributed round-robin across the selected zones; selecting one zone remains supported.
+
+East US 2 is **not** the VM location. Under AVD's default geographical deployment scope, these settings associate AVD metadata with the **US geography**, outside Mexico; they do not guarantee metadata storage exclusively in East US 2. Review [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) and customer residency requirements before deploying. [Mexico Central supports availability zones](https://learn.microsoft.com/azure/reliability/regions-list), but the selected subscription's SKU/image availability, quota and capacity must still be checked. The form queries the selected region and exact VM SKU; a region-wide availability-zone listing is not proof that that SKU can be deployed.
+
+Supply the customer's subscription, deployment prefix, identity/domain information, access groups, and credentials. No customer credentials, subscription ID, or tenant-specific enterprise-application object ID is preconfigured. For Start VM on Connect or scaling, use the existing picker to select the **Azure Virtual Desktop** enterprise application in the customer's tenant. Application ID `9cdead84-a844-4324-93f2-b2e6bb768d07` identifies the application, but its service-principal **object ID varies by tenant** and cannot be substituted with the application ID.
+
+Register the required providers and verify private-link routing and DNS as described in [Getting Started](./getting-started-baseline.md). The host pool retains the form's private-link default `EnabledForClientsOnly`; review the client/session-host access settings rather than assuming all AVD traffic is private. New DNS zones must be reachable through the customer's DNS design, especially with AD DS and custom DNS servers.
+
+**The hosted button is not updated by local edits.** After review and authorization, publish the source, generated ARM, form, and documentation together to this fork's `main`, then use the button. Before publication, only the local worktree contains these changes. No successful customer deployment is implied.
+
 | Portal UI Experience (ARM) |
 | ------------------------------------------------------------ |
-| [![Deploy To Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%main%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure China](https://aka.ms/deploytoazurechinabutton)](https://portal.azure.cn/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json)|
+| [![Deploy To Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgracielars999%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fgracielars999%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure China](https://aka.ms/deploytoazurechinabutton)](https://portal.azure.cn/?feature.deployapiver=2022-12-01#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json)|
 
 - **Basics** blade
   - **Subscription** - The subscription where the accelerator is going to deploy the resources.
-  - **Region** – The desired Azure Region to be used for the deployment. Management Plane and Session Host Locations will be selected separately.
+  - **AVD management plane region** – Defaults to East US 2 for AVD service objects. The session host location is selected separately.
   - **Prefix** – A prefix of maximum 4 characters that will be appended to the names of Resource Groups and Azure resources within the Resource Groups.
   - **Environment** – Deployment Environment type (Development/Test/Production), will be used for naming and tagging purposes.
 - **Identity provider** blade
@@ -36,7 +66,7 @@
     - **Recommendation**:
       - Enable relevant Defender solutions for better security posture in production environments. For cost estimation, refer to the [Azure Pricing Calculator](https://azure.microsoft.com/en-us/pricing/calculator/).
 - **Management plane** blade
-  - **Deployment location** - The Azure Region where management plane resources (workspace, host pool, application groups) will be deployed. These resources are not available in all locations but are globally replicated and they can share the same location as the session hosts or not.
+  - **Deployment location** - Uses the management plane region selected on the Basics step. Supported service-object locations differ from session host VM locations; see [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) for the metadata deployment scope.
   - **Host pool type** - This option determines if a personal (aka single session) or pool (aka multi-session ) host pool will be configured.
   - When Pooled is selected:
     - **Load balancing algorithm** - Choose either breadth-first or depth-first, based on your usage pattern. Learn more about what each of these options means at [Host pool load-balancing methods](https://docs.microsoft.com/azure/virtual-desktop/host-pool-load-balancing).
@@ -48,9 +78,9 @@
     - **Start VM on connect** - Choose if you want the host pool to be configured to allow users starting session hosts on demand.
 - **Session hosts** blade
   - **Deploy sessions hosts** - You can choose to not deploy session hosts just the Azure Virtual Desktop service objects.
-  - **Session host region** - Provide the region to where you want to deploy the session hosts. This defaults to the Management Plane region but can be changed.
+  - **Session host region** - Defaults to Mexico Central, independently of the management plane region.
   - **Session hosts OU path (Optional)** - Provide OU where to locate session hosts, if not provided session hosts will be placed on the default (computers) OU. If left empty the computer account will be created in the default Computers OU. Example: OU=avd,DC=contoso,DC=com.
-  - **Availability zones** - If you uncheck the checkbox, VMs will be deployed regionally. If you select the checkbox the accelerator  will distribute compute and storage resources across availability zones.
+  - **Availability zones** - Choose Availability Zones and select one or more zones from the multi-select list. The Multiva selection is zones 1 and 2 when available for the selected size/region. The form always outputs an array of string zone identifiers, including for a single selection. Choose "No infrastructure redundancy required" for regional VMs; this is independent of the storage redundancy selection.
   - **VM size** -  Select the SKU size for the session hosts.
   - **VM count** - Select the number of session hosts to deploy.
   - **OS disk type** - Select the OS Disk SKU type. Premium is recommended for performance and a higher SLA.
@@ -89,7 +119,7 @@
 - **Monitoring** blade
   - **Deploy monitoring** - select checkbox to deploy all required diagnostic configurations all Azure Virtual Desktop resources, also events and performance stats will be pushed from session hosts to a log analytics workspace.
     - **Log analytics workspace** - select if creating a new workspace or if using and existing one.
-    - **Deploy monitoring policies (subscription level)** - select the checkbox to deploy custom policies and policy sets will be created and assigned to the subscription to enforce deployIfNotExist rules to future Azure Virtual Desktop resources.
+    - **Deploy monitoring policies (subscription level)** - creates custom policy and initiative definitions at subscription scope, then assignments and per-policy remediations in the workload resource groups. Contributor alone is insufficient; see [monitoring permissions and troubleshooting](./baseline-troubleshooting-guide.md#monitoring-and-subscription-level-policies). Disabling monitoring is the requested Multiva default, not a diagnosis or fix for a previous failure.
 - **Resource naming** blade
   - **Custom Resource Naming** - select the checkbox to provide the names that will be used to name resources. When the checkbox is not selected deployment will use the Azure Virtual Desktop accelerator naming standard.
 - **Resource tagging** blade
@@ -113,7 +143,7 @@ We have these other options available:
 
 | Deployment Type | Link |
 |:--|:--|
-| Azure portal UI |[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure China](https://aka.ms/deploytoazurechinabutton)](https://portal.azure.cn/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json)|
+| Azure portal UI |[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgracielars999%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fgracielars999%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json) [![Deploy to Azure China](https://aka.ms/deploytoazurechinabutton)](https://portal.azure.cn/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Farm%2Fdeploy-baseline.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Favdaccelerator%2Fmain%2Fworkload%2Fportal-ui%2Fportal-ui-baseline.json)|
 | Command line (Bicep/ARM) | [![Powershell/Azure CLI](./icons/powershell.png)](../bicep/readme.md#avd-accelerator-baseline) |
 | Terraform | [![Terraform](./icons/terraform.png)](../terraform/greenfield/readme.md) |
 

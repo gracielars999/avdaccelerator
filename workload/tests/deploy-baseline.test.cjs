@@ -1,0 +1,454 @@
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { join, resolve } = require('node:path');
+const test = require('node:test');
+
+const root = resolve(__dirname, '..', '..');
+const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
+const form = JSON.parse(read('workload', 'portal-ui', 'portal-ui-baseline.json'));
+const template = JSON.parse(read('workload', 'arm', 'deploy-baseline.json'));
+
+function* objects(value) {
+  if (!value || typeof value !== 'object') return;
+  if (!Array.isArray(value)) yield value;
+  for (const child of Object.values(value)) yield* objects(child);
+}
+
+function control(name) {
+  const result = [...objects(form)].find(value => value.name === name && value.type);
+  assert.ok(result, `Missing form control ${name}`);
+  return result;
+}
+
+// Evaluate the saved expressions, not a separately reimplemented deployment decision.
+// This limited interpreter is an offline contract check, not the Portal runtime.
+function evaluate(expression, functions) {
+  if (typeof expression !== 'string' || !expression.startsWith('[') ||
+      !expression.endsWith(']') || expression.startsWith('[[')) return expression;
+  const body = expression.slice(1, -1);
+  const tokenizer = /\s*('(?:''|[^'])*'|=>|[A-Za-z_][A-Za-z_0-9]*|-?\d+|[()[\].,])\s*/y;
+  const tokens = [];
+  while (tokenizer.lastIndex < body.length) {
+    const position = tokenizer.lastIndex;
+    const match = tokenizer.exec(body);
+    assert.ok(match, `Unsupported expression token at ${position}: ${body}`);
+    tokens.push(match[1]);
+  }
+  let position = 0;
+  const take = expected => {
+    const token = tokens[position++];
+    if (expected !== undefined) assert.equal(token, expected);
+    return token;
+  };
+  function parse() {
+    const token = take();
+    let node;
+    if (token === '(') {
+      const parameter = take();
+      take(')');
+      take('=>');
+      node = { kind: 'lambda', parameter, body: parse() };
+    } else if (token.startsWith("'")) {
+      node = { kind: 'literal', value: token.slice(1, -1).replace(/''/g, "'") };
+    } else if (/^-?\d+$/.test(token)) {
+      node = { kind: 'literal', value: Number(token) };
+    } else if (token === 'true' || token === 'false' || token === 'null') {
+      node = { kind: 'literal', value: JSON.parse(token) };
+    } else if (tokens[position] === '(') {
+      take('(');
+      const args = [];
+      while (tokens[position] !== ')') {
+        args.push(parse());
+        if (tokens[position] !== ',') break;
+        take(',');
+      }
+      take(')');
+      node = { kind: 'call', name: token, args };
+    } else {
+      node = { kind: 'variable', name: token };
+    }
+    while (tokens[position] === '.' || tokens[position] === '[') {
+      if (take() === '.') {
+        node = { kind: 'member', object: node, key: { kind: 'literal', value: take() } };
+      } else {
+        node = { kind: 'member', object: node, key: parse() };
+        take(']');
+      }
+    }
+    return node;
+  }
+  const tree = parse();
+  assert.equal(position, tokens.length, `Unparsed expression: ${body}`);
+  function run(node, locals = {}) {
+    if (node.kind === 'literal') return node.value;
+    if (node.kind === 'variable') {
+      assert.ok(Object.hasOwn(locals, node.name), `Unknown variable ${node.name}`);
+      return locals[node.name];
+    }
+    if (node.kind === 'member') return run(node.object, locals)[run(node.key, locals)];
+    if (node.kind === 'lambda') {
+      return value => run(node.body, { ...locals, [node.parameter]: value });
+    }
+    if (node.name === 'if') {
+      return run(node.args[0], locals) ? run(node.args[1], locals) : run(node.args[2], locals);
+    }
+    assert.ok(Object.hasOwn(functions, node.name), `Unsupported function ${node.name}`);
+    return functions[node.name](...node.args.map(arg => run(arg, locals)));
+  }
+  return run(tree);
+}
+
+const functions = {
+  and: (...values) => values.every(Boolean),
+  or: (...values) => values.some(Boolean),
+  not: value => !value,
+  equals: (left, right) => left === right,
+  empty: value => value == null || Object.keys(value).length === 0,
+  first: value => value[0],
+  map: (values, callback) => values.map(callback),
+  filter: (values, callback) => values.filter(callback),
+  parse: JSON.parse,
+  json: JSON.parse,
+  string: value => {
+    assert.notEqual(value, undefined);
+    return typeof value === 'string' ? value : JSON.stringify(value);
+  },
+  startsWith: (value, prefix) => value.startsWith(prefix),
+  split: (value, delimiter) => value.split(delimiter),
+  contains: (value, item) => value.includes(item),
+  toLower: value => value.toLowerCase(),
+  replace: (value, from, to) => value.split(from).join(to),
+  concat: (...values) => values.join(''),
+  decodeUriComponent: decodeURIComponent,
+  int: value => {
+    const result = Number(value);
+    assert.ok(Number.isInteger(result), `Not an integer: ${value}`);
+    return result;
+  },
+  length: value => value.length,
+  range: (start, count) => Array.from({ length: count }, (_, index) => start + index),
+  mul: (left, right) => left * right,
+  div: (left, right) => Math.trunc(left / right),
+  mod: (left, right) => left % right,
+  createArray: (...values) => values,
+  createObject: (...values) => Object.fromEntries(
+    Array.from({ length: values.length / 2 }, (_, index) => [values[index * 2], values[index * 2 + 1]])
+  ),
+  union: (...arrays) => [...new Map(arrays.flat().map(value => [JSON.stringify(value), value])).values()],
+  format: (format, ...values) => format.replace(/\{(\d+)\}/g, (_, index) => values[index]),
+  resourceId: (subscription, group, type, name) =>
+    `/subscriptions/${subscription}/resourceGroups/${group}/providers/${type}/${name}`
+};
+
+const uiEvaluate = (expression, state) => evaluate(expression, {
+  ...functions,
+  steps: name => state[name]
+});
+
+function defaultValue(name, state) {
+  const element = control(name);
+  if (element.type === 'Microsoft.Common.CheckBox') {
+    assert.equal(Object.hasOwn(element, 'defaultValue'), false);
+    return false;
+  }
+  assert.ok(Object.hasOwn(element, 'defaultValue'), `No default for ${name}`);
+  const value = uiEvaluate(element.defaultValue, state);
+  if (!element.constraints?.allowedValues) return value;
+  const allowed = uiEvaluate(element.constraints.allowedValues, state);
+  const select = option => {
+    const match = allowed.find(item =>
+      typeof option === 'object' ? item.value === option.value : item.label === option);
+    assert.ok(match, `Unavailable default for ${name}: ${JSON.stringify(option)}`);
+    return match.value;
+  };
+  return Array.isArray(value) ? value.map(select) : select(value);
+}
+
+function state() {
+  const value = {
+    basics: {
+      subscription: { subscriptionId: '00000000-0000-4000-8000-000000000001' },
+      managementPlaneApi: { value: [{ resourceType: 'workspaces', locations: ['East US 2'] }] }
+    },
+    managementPlane: { managementPlaneHostPoolSettings: {} },
+    sessionHosts: {
+      sessionHostsRegionSection: {
+        computeApi: { value: [{ resourceType: 'virtualMachines', locations: ['Mexico Central', 'East US 2'] }] },
+        resourceSkusApi: { value: [
+          { name: 'Standard_D4ads_v5_extra', locationInfo: [{ location: 'mexicocentral', zones: ['3'] }] },
+          { name: 'Standard_D4ads_v5', locationInfo: [
+            { location: 'eastus2', zones: ['3'] },
+            { location: 'mexicocentral', zones: ['1', '2', '3'] }
+          ] }
+        ] }
+      },
+      sessionHostsOsSection: {
+        skusApi: [{ name: 'win11-24h2-ent' }, { name: 'win11-24h2-avd' }, { name: 'win11-23h2-ent' }]
+      },
+      sessionHostsSettingsSection: {},
+      sessionHostsAvailabilitySection: {}
+    },
+    storage: { storageFslogix: {} },
+    network: {},
+    monitoring: {}
+  };
+  value.basics.managementPlaneLocation = defaultValue('managementPlaneLocation', value);
+  value.managementPlane.managementPlaneHostPoolSettings.hostPoolType = defaultValue('hostPoolType', value);
+  value.sessionHosts.deploySessionHosts = defaultValue('deploySessionHosts', value);
+  const hosts = value.sessionHosts;
+  hosts.sessionHostsRegionSection.sessionHostsRegion = defaultValue('sessionHostsRegion', value);
+  hosts.sessionHostsSettingsSection.sessionHostSize = control('sessionHostSize').recommendedSizes[0];
+  for (const name of ['sessionHostsCount', 'sessionHostDiskType']) {
+    hosts.sessionHostsSettingsSection[name] = defaultValue(name, value);
+  }
+  for (const name of ['source', 'offer', 'sku']) {
+    hosts.sessionHostsOsSection[name] = defaultValue(name, value);
+  }
+  hosts.sessionHostsAvailabilitySection.option = defaultValue('option', value);
+  hosts.sessionHostsAvailabilitySection.availabilityZones = defaultValue('availabilityZones', value);
+  value.storage.storageFslogix.fslogixDeployment = defaultValue('fslogixDeployment', value);
+  for (const name of ['createAvdVirtualNetwork', 'virtualNetworkSize', 'virtualNetworkAvdSubnetSize',
+    'virtualNetworkPrivateEndpointSubnetSize', 'deployAvdPrivateLinkService', 'virtualNetworkPrivateDnsZone']) {
+    value.network[name] = defaultValue(name, value);
+  }
+  value.network.deployPrivateEndpointKeyvaultStorage = false;
+  value.network.hostPoolPrivateEndpointNetworkAccessSelector = defaultValue('hostPoolPrivateEndpointNetworkAccessSelector', value);
+  value.monitoring.deployMonitoring = defaultValue('deployMonitoring', value);
+  value.monitoring.deployMonitoringAlaWorkspace = defaultValue('deployMonitoringAlaWorkspace', value);
+  value.monitoring.deployMonitoringNewAlaWorkspaceRetention = defaultValue('deployMonitoringNewAlaWorkspaceRetention', value);
+  return value;
+}
+
+const output = (name, value) => uiEvaluate(form.view.outputs.parameters[name], value);
+const templates = [...objects(template)].filter(value => value.$schema && value.resources && value.parameters);
+const hostsTemplate = templates.find(value => value.variables?.copy?.some(item => item.name === 'varZones'));
+const policyTemplate = templates.find(value => value.variables?.varCustomPolicySetDefinitions);
+
+function armContext(arm, parameters) {
+  const cache = new Map();
+  const indices = new Map();
+  const resolveValue = value => {
+    if (Array.isArray(value)) return value.map(resolveValue);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, resolveValue(child)]));
+    }
+    return evaluate(value, context);
+  };
+  const context = {
+    ...functions,
+    parameters: name => {
+      assert.ok(Object.hasOwn(parameters, name), `Missing parameter ${name}`);
+      return parameters[name];
+    },
+    copyIndex: (name = '') => {
+      assert.ok(indices.has(name), `Missing copy index ${name}`);
+      return indices.get(name);
+    },
+    variables: name => {
+      if (!cache.has(name)) {
+        const loop = arm.variables.copy?.find(item => item.name === name);
+        if (loop) {
+          const count = evaluate(loop.count, context);
+          const values = Array.from({ length: count }, (_, index) => {
+            indices.set(name, index);
+            return resolveValue(loop.input);
+          });
+          indices.delete(name);
+          cache.set(name, values);
+        } else {
+          assert.ok(Object.hasOwn(arm.variables, name), `Missing ARM variable ${name}`);
+          cache.set(name, resolveValue(arm.variables[name]));
+        }
+      }
+      return cache.get(name);
+    }
+  };
+  return { evaluate: value => evaluate(value, context), variables: context.variables, indices };
+}
+
+test('Multiva form defaults produce the matching compiled template values', () => {
+  const expected = {
+    avdSessionHostLocation: 'mexicocentral', avdManagementPlaneLocation: 'eastus2',
+    avdHostPoolType: 'Personal', avdSessionHostDiskType: 'Premium_LRS',
+    mpImageOffer: 'windows-11', mpImageSku: 'win11-24h2-ent',
+    availability: 'AvailabilityZones', availabilityZones: ['1', '2'],
+    createAvdFslogixDeployment: false, createAvdVnet: true,
+    avdVnetworkAddressPrefixes: '10.131.0.0/16',
+    vNetworkAvdSubnetAddressPrefix: '10.131.17.0/24',
+    vNetworkPrivateEndpointSubnetAddressPrefix: '10.131.16.0/24',
+    deployAvdPrivateLinkService: true, createPrivateDnsZones: true,
+    avdDeployMonitoring: false, avdDeploySessionHosts: true,
+    avdDeploySessionHostsCount: 1
+  };
+  const value = state();
+  for (const [name, wanted] of Object.entries(expected)) {
+    assert.deepEqual(output(name, value), wanted, `Form output ${name}`);
+    assert.deepEqual(template.parameters[name].defaultValue, wanted, `Compiled default ${name}`);
+  }
+  assert.equal(output('hostPoolPublicNetworkAccess', value), 'EnabledForClientsOnly');
+  assert.equal(template.parameters.avdSessionHostsSize.defaultValue, 'Standard_D4ads_v5');
+  assert.equal(control('sessionHostSize').recommendedSizes[0], 'Standard_D4ads_v5');
+  assert.equal(evaluate(template.parameters.hostPoolPublicNetworkAccess.defaultValue, {
+    ...functions, parameters: () => true
+  }), 'EnabledForClientsOnly');
+  assert.equal(evaluate(template.parameters.hostPoolPublicNetworkAccess.defaultValue, {
+    ...functions, parameters: () => false
+  }), 'Enabled');
+});
+
+for (const [selection, expected] of [
+  [1, ['1']], ['1', ['1']], [['1'], ['1']], [[1], ['1']],
+  [['1', '2'], ['1', '2']], [[1, 2], ['1', '2']], [['1', '2', '3'], ['1', '2', '3']]
+]) {
+  test(`saved zone expression normalizes ${JSON.stringify(selection)} to a flat string array`, () => {
+    const value = state();
+    value.sessionHosts.sessionHostsAvailabilitySection.availabilityZones = selection;
+    const result = output('availabilityZones', value);
+    assert.deepEqual(result, expected);
+    assert.ok(result.every(zone => template.parameters.availabilityZones.allowedValues.includes(zone)));
+    assert.equal(template.parameters.availabilityZones.type.toLowerCase(), 'array');
+    assert.equal(hostsTemplate.parameters.availabilityZones.type.toLowerCase(), 'array');
+  });
+}
+
+test('regional and no-session-host modes output an empty zone array', () => {
+  const value = state();
+  value.sessionHosts.sessionHostsAvailabilitySection.option = 'None';
+  value.sessionHosts.sessionHostsAvailabilitySection.availabilityZones = undefined;
+  assert.deepEqual(output('availabilityZones', value), []);
+  assert.equal(uiEvaluate(control('availabilityZonesUnavailable').visible, value), true);
+  value.sessionHosts.deploySessionHosts = false;
+  assert.deepEqual(output('availabilityZones', value), []);
+});
+
+test('zone choices use the exact SKU and selected location rather than a prefix or first region', () => {
+  const value = state();
+  assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
+    ['1', '2', '3']);
+  const sku = value.sessionHosts.sessionHostsRegionSection.resourceSkusApi.value[1];
+  sku.locationInfo[1].zones = [];
+  assert.equal(defaultValue('option', value), 'None');
+});
+
+test('Marketplace filtering retains both single-session Enterprise and multi-session choices', () => {
+  const values = uiEvaluate(control('sku').constraints.allowedValues, state()).map(item => item.value);
+  assert.ok(values.includes('win11-24h2-ent'));
+  assert.ok(values.includes('win11-24h2-avd'));
+});
+
+test('retention validates every integer from 30 through 730 and exports an integer', () => {
+  const regex = new RegExp(control('deployMonitoringNewAlaWorkspaceRetention').constraints.regex);
+  for (let days = 30; days <= 730; days++) assert.ok(regex.test(String(days)), String(days));
+  for (const invalid of ['', '29', '731', '90.5', 'abc', '-1', ' 90', '0090']) {
+    assert.equal(regex.test(invalid), false, invalid);
+  }
+  const value = state();
+  assert.equal(output('avdAlaWorkspaceDataRetention', value), 0);
+  value.monitoring.deployMonitoring = true;
+  assert.equal(output('avdAlaWorkspaceDataRetention', value), 90);
+  assert.equal(template.parameters.avdAlaWorkspaceDataRetention.type, 'int');
+});
+
+test('every form parameter output exists in the compiled template and subscription IDs are canonical', () => {
+  for (const name of Object.keys(form.view.outputs.parameters)) assert.ok(Object.hasOwn(template.parameters, name), name);
+  const value = state();
+  assert.equal(form.view.outputs.kind, 'Subscription');
+  assert.equal(uiEvaluate(form.view.outputs.location, value), 'eastus2');
+  assert.equal(uiEvaluate(form.view.outputs.subscriptionId, value), value.basics.subscription.subscriptionId);
+  assert.equal(output('avdWorkloadSubsId', value), value.basics.subscription.subscriptionId);
+  assert.equal(JSON.stringify(form).includes('resourceScope'), false);
+  for (const name of ['avdVirtualNetworkSelectorId', 'privateEndpointVirtualNetworkSelectorId',
+    'alaWorkspaceExistingWorkspacesSelection']) {
+    const element = control(name);
+    assert.equal(uiEvaluate(element.scope.subscriptionId, value), value.basics.subscription.subscriptionId);
+  }
+});
+
+test('credentials and tenant-specific enterprise application IDs remain customer inputs', () => {
+  for (const name of ['avdVmLocalUserName', 'avdVmLocalUserPassword', 'avdWorkloadSubsId']) {
+    assert.equal(Object.hasOwn(template.parameters[name], 'defaultValue'), false, name);
+  }
+  assert.equal(template.parameters.avdVmLocalUserPassword.type.toLowerCase(), 'securestring');
+  assert.equal(template.parameters.avdServicePrincipalObjectId.defaultValue, '');
+});
+
+test('generated VM zone assignment consumes one or several zones round-robin', () => {
+  const module = hostsTemplate.resources.find(value => value.copy?.name === 'sessionHosts');
+  for (const zones of [['1'], ['1', '2']]) {
+    const context = armContext(hostsTemplate, { availabilityZones: zones, availability: 'AvailabilityZones', count: 4 });
+    assert.deepEqual(context.variables('varZones'), zones.map(Number));
+    const assigned = Array.from({ length: 4 }, (_, index) => {
+      context.indices.set('', index);
+      return context.evaluate(module.properties.parameters.zone).value;
+    });
+    assert.deepEqual(assigned, zones.length === 1 ? [1, 1, 1, 1] : [1, 2, 1, 2]);
+  }
+});
+
+test('every initiative child is remediated against the correct resource-group assignment', () => {
+  const remediation = policyTemplate.resources.find(value => value.copy?.name === 'policySetRemediation');
+  for (const [network, storage, groups] of [['', '', 2], ['rg-network', '', 3], ['rg-network', 'rg-storage', 4]]) {
+    const context = armContext(policyTemplate, {
+      subscriptionId: 'test-subscription', computeObjectsRgName: 'rg-compute',
+      serviceObjectsRgName: 'rg-service', networkObjectsRgName: network, storageObjectsRgName: storage
+    });
+    const definitions = context.variables('varCustomPolicySetDefinitions');
+    const references = definitions.libSetChildDefinitions.map(value => value.definitionReferenceId);
+    assert.equal(references.length, 9);
+    assert.equal(new Set(references).size, 9);
+    const items = context.variables('varPolicyRemediations');
+    assert.equal(items.length, groups * references.length);
+    assert.equal(context.evaluate(remediation.copy.count), items.length);
+    for (let index = 0; index < items.length; index++) {
+      context.indices.set('', index);
+      const item = items[index];
+      assert.equal(context.evaluate(remediation.resourceGroup), item.rgName);
+      assert.equal(context.evaluate(remediation.properties.parameters.policyDefinitionReferenceId.value),
+        references[index % references.length]);
+      assert.equal(context.evaluate(remediation.properties.parameters.policyAssignmentId.value),
+        `/subscriptions/test-subscription/resourceGroups/${item.rgName}/providers/Microsoft.Authorization/policyAssignments/${definitions.libSetDefinition.name}`);
+    }
+    assert.ok(remediation.dependsOn.includes('policySetAssignment'));
+  }
+});
+
+test('AMA explicitly waits for VM creation even when the antimalware deployment is conditional', () => {
+  const ama = hostsTemplate.resources.find(value => value.copy?.name === 'ama');
+  assert.ok(ama.dependsOn.includes('sessionHosts'));
+  assert.ok(ama.dependsOn.includes('sessionHostsAntimalwareExtension'));
+  assert.equal(ama.condition, "[parameters('deployMonitoring')]");
+});
+
+test('Mexico naming and Windows time zone are defined and approved subnet ranges fit without overlap', () => {
+  const locations = JSON.parse(read('workload', 'variables', 'locations.json'));
+  assert.deepEqual(locations.mexicocentral, {
+    acronym: 'mxc', timeDifference: '-6:00', timeZone: 'Central Standard Time (Mexico)'
+  });
+  const range = cidr => {
+    const [address, prefix] = cidr.split('/');
+    const start = address.split('.').reduce((result, part) => result * 256 + Number(part), 0);
+    return [start, start + 2 ** (32 - Number(prefix)) - 1];
+  };
+  const vnet = range(template.parameters.avdVnetworkAddressPrefixes.defaultValue);
+  const hosts = range(template.parameters.vNetworkAvdSubnetAddressPrefix.defaultValue);
+  const endpoints = range(template.parameters.vNetworkPrivateEndpointSubnetAddressPrefix.defaultValue);
+  for (const subnet of [hosts, endpoints]) assert.ok(subnet[0] >= vnet[0] && subnet[1] <= vnet[1]);
+  assert.ok(hosts[1] < endpoints[0] || endpoints[1] < hosts[0]);
+});
+
+test('commercial baseline buttons load both fork artifacts without redirecting optional deployments', () => {
+  for (const parts of [['readme.md'], ['workload', 'docs', 'deploy-baseline.md'],
+    ['workload', 'docs', 'getting-started-baseline.md']]) {
+    const links = read(...parts).match(/https:\/\/portal\.azure\.com\/#blade\/Microsoft_Azure_CreateUIDef\/CustomDeploymentBlade\/uri\/[^)]+/g);
+    assert.ok(links?.length, parts.join('\\'));
+    for (const link of links) {
+      const [arm, ui] = link.split('/uri/')[1].split('/uiFormDefinitionUri/').map(decodeURIComponent);
+      if (arm.endsWith('/deploy-baseline.json')) {
+        assert.equal(arm, 'https://raw.githubusercontent.com/gracielars999/avdaccelerator/main/workload/arm/deploy-baseline.json');
+        assert.equal(ui, 'https://raw.githubusercontent.com/gracielars999/avdaccelerator/main/workload/portal-ui/portal-ui-baseline.json');
+      } else {
+        assert.ok(arm.startsWith('https://raw.githubusercontent.com/Azure/avdaccelerator/'));
+      }
+    }
+  }
+});

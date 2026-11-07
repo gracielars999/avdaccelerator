@@ -1,7 +1,5 @@
-using './deploy-baseline.bicep'
+using '../deploy-baseline.bicep'
 
-param avdSessionHostLocation = ''
-param avdManagementPlaneLocation = ''
+param avdWorkloadSubsId = ''
 param avdVmLocalUserName = ''
 param avdVmLocalUserPassword = ''
-
