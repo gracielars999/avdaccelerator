@@ -11,7 +11,7 @@ The commercial baseline in this fork is the Multiva-specific version of the upst
 | Host pool | Personal, automatic assignment |
 | Image | Marketplace, `MicrosoftWindowsDesktop/windows-11/win11-24h2-ent`, latest image version |
 | OS disk | Premium |
-| Availability | Zones 1 and 2, when offered for the selected VM size and region |
+| Availability | Availability Zones, with logical zones 1 and 2 selected when returned for the subscription/region |
 | FSLogix | Disabled |
 | Virtual network | New, `10.131.0.0/16` |
 | AVD subnet | `10.131.17.0/24` |
@@ -22,9 +22,21 @@ The commercial baseline in this fork is the Multiva-specific version of the upst
 
 The existing VM size (`Standard_D4ads_v5`), VM count (**1**), and other unrelated source defaults are unchanged. The Portal size selector retains that size as its first recommendation; select a size available in the customer's subscription. Selecting two zones does not create two VMs: increase the VM count to at least two to place hosts in both zones. Hosts are distributed round-robin across the selected zones; selecting one zone remains supported.
 
-East US 2 is **not** the VM location. Under AVD's default geographical deployment scope, these settings associate AVD metadata with the **US geography**, outside Mexico; they do not guarantee metadata storage exclusively in East US 2. Review [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) and customer residency requirements before deploying. [Mexico Central supports availability zones](https://learn.microsoft.com/azure/reliability/regions-list), but the selected subscription's SKU/image availability, quota and capacity must still be checked. The form queries the selected region and exact VM SKU; a region-wide availability-zone listing is not proof that that SKU can be deployed.
+East US 2 is **not** the VM location. Under AVD's default geographical deployment scope, these settings associate AVD metadata with the **US geography**, outside Mexico; they do not guarantee metadata storage exclusively in East US 2. Review [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) and customer residency requirements before deploying. [Mexico Central supports availability zones](https://learn.microsoft.com/azure/reliability/regions-list), but the selected subscription's SKU/image availability, quota and capacity must still be checked.
+
+The Availability Option remains selectable independently of VM size discovery. Zone choices use the selected subscription's [regional logical zone mappings](https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations), not physical zone identifiers or an incomplete SKU-list response. A missing/pending regional response shows an explicit warning and leaves the required zone selection empty; it does not silently switch to regional VMs. Before continuing with zonal deployment, verify the VM size in each selected zone and acknowledge the form's verification checkbox. This form captures deployment intent, not a guarantee of SKU availability or capacity.
+
+For example, after signing into the **customer's** subscription, this read-only command follows SKU-list pagination and includes subscription restrictions:
+
+```powershell
+az vm list-skus --subscription "<customer-subscription-id>" --location mexicocentral --size Standard_D4ads_v5 --resource-type virtualMachines --all --query "[?name=='Standard_D4ads_v5'].{name:name,locationInfo:locationInfo,restrictions:restrictions}" --output json
+```
+
+Check `locationInfo` for `mexicocentral`, its `zones`, and any location/zone `restrictions`. No matching SKU, a zone not listed for that size, or a subscription restriction is not resolved by selecting the zone in this form; choose an eligible size or resolve the restriction first. The command is not a deployment, and listed eligibility is still not a capacity guarantee.
 
 Supply the customer's subscription, deployment prefix, identity/domain information, access groups, and credentials. No customer credentials, subscription ID, or tenant-specific enterprise-application object ID is preconfigured. For Start VM on Connect or scaling, use the existing picker to select the **Azure Virtual Desktop** enterprise application in the customer's tenant. Application ID `9cdead84-a844-4324-93f2-b2e6bb768d07` identifies the application, but its service-principal **object ID varies by tenant** and cannot be substituted with the application ID.
+
+The Basics step retains the upstream composite deployment-scope picker for Portal review. Select the subscription and **Deployment record region** there (East US 2 is recommended). This record location is separate from the explicit **AVD management plane region** default (East US 2) and **Session hosts region** default (Mexico Central); selecting it does not change either resource-region setting. Region-provider and hidden storage-zone lookups are guarded while data is unavailable so they do not dereference an undefined `location` during form review.
 
 Register the required providers and verify private-link routing and DNS as described in [Getting Started](./getting-started-baseline.md). The host pool retains the form's private-link default `EnabledForClientsOnly`; review the client/session-host access settings rather than assuming all AVD traffic is private. New DNS zones must be reachable through the customer's DNS design, especially with AD DS and custom DNS servers.
 
@@ -80,7 +92,7 @@ Register the required providers and verify private-link routing and DNS as descr
   - **Deploy sessions hosts** - You can choose to not deploy session hosts just the Azure Virtual Desktop service objects.
   - **Session host region** - Defaults to Mexico Central, independently of the management plane region.
   - **Session hosts OU path (Optional)** - Provide OU where to locate session hosts, if not provided session hosts will be placed on the default (computers) OU. If left empty the computer account will be created in the default Computers OU. Example: OU=avd,DC=contoso,DC=com.
-  - **Availability zones** - Choose Availability Zones and select one or more zones from the multi-select list. The Multiva selection is zones 1 and 2 when available for the selected size/region. The form always outputs an array of string zone identifiers, including for a single selection. Choose "No infrastructure redundancy required" for regional VMs; this is independent of the storage redundancy selection.
+  - **Availability zones** - Choose Availability Zones and select one or more logical zones from the selected region's multi-select list. The Multiva selection is zones 1 and 2. Verify the selected VM size and subscription restrictions for those zones and acknowledge the verification checkbox. The form always outputs an array of string zone identifiers, including for a single selection. Choose "No infrastructure redundancy required" explicitly for regional VMs; this is independent of the storage redundancy selection.
   - **VM size** -  Select the SKU size for the session hosts.
   - **VM count** - Select the number of session hosts to deploy.
   - **OS disk type** - Select the OS Disk SKU type. Premium is recommended for performance and a higher SLA.

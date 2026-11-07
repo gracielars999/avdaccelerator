@@ -85,7 +85,7 @@ function evaluate(expression, functions) {
       assert.ok(Object.hasOwn(locals, node.name), `Unknown variable ${node.name}`);
       return locals[node.name];
     }
-    if (node.kind === 'member') return run(node.object, locals)[run(node.key, locals)];
+    if (node.kind === 'member') return run(node.object, locals)?.[run(node.key, locals)];
     if (node.kind === 'lambda') {
       return value => run(node.body, { ...locals, [node.parameter]: value });
     }
@@ -167,18 +167,22 @@ function defaultValue(name, state) {
 function state() {
   const value = {
     basics: {
-      subscription: { subscriptionId: '00000000-0000-4000-8000-000000000001' },
+      resourceScope: {
+        subscription: { subscriptionId: '00000000-0000-4000-8000-000000000001' },
+        location: { name: 'eastus2', displayName: 'East US 2' }
+      },
       managementPlaneApi: { value: [{ resourceType: 'workspaces', locations: ['East US 2'] }] }
     },
     managementPlane: { managementPlaneHostPoolSettings: {} },
     sessionHosts: {
       sessionHostsRegionSection: {
         computeApi: { value: [{ resourceType: 'virtualMachines', locations: ['Mexico Central', 'East US 2'] }] },
-        resourceSkusApi: { value: [
-          { name: 'Standard_D4ads_v5_extra', locationInfo: [{ location: 'mexicocentral', zones: ['3'] }] },
-          { name: 'Standard_D4ads_v5', locationInfo: [
-            { location: 'eastus2', zones: ['3'] },
-            { location: 'mexicocentral', zones: ['1', '2', '3'] }
+        locationZonesApi: { value: [
+          { name: 'eastus2', availabilityZoneMappings: [{ logicalZone: '3', physicalZone: 'eastus2-az1' }] },
+          { name: 'mexicocentral', availabilityZoneMappings: [
+            { logicalZone: '1', physicalZone: 'mexicocentral-az3' },
+            { logicalZone: '2', physicalZone: 'mexicocentral-az1' },
+            { logicalZone: '3', physicalZone: 'mexicocentral-az2' }
           ] }
         ] }
       },
@@ -188,7 +192,11 @@ function state() {
       sessionHostsSettingsSection: {},
       sessionHostsAvailabilitySection: {}
     },
-    storage: { storageFslogix: {} },
+    storage: {
+      storageFslogix: {},
+      storageAppAttach: { appAttachStorageDeployment: false },
+      storageGeneralSettings: {}
+    },
     network: {},
     monitoring: {}
   };
@@ -321,13 +329,72 @@ test('regional and no-session-host modes output an empty zone array', () => {
   assert.deepEqual(output('availabilityZones', value), []);
 });
 
-test('zone choices use the exact SKU and selected location rather than a prefix or first region', () => {
+test('zone choices use the selected region and logical identifiers rather than the first region or physical zones', () => {
   const value = state();
   assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
     ['1', '2', '3']);
-  const sku = value.sessionHosts.sessionHostsRegionSection.resourceSkusApi.value[1];
-  sku.locationInfo[1].zones = [];
-  assert.equal(defaultValue('option', value), 'None');
+  value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = 'EastUS2';
+  assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
+    ['3']);
+});
+
+test('missing or paged SKU data cannot remove Availability Zones or change the zonal default', () => {
+  const value = state();
+  for (const response of [undefined, { value: [] }, {
+    value: [{ name: 'Standard_D4ads_v5_extra', locationInfo: [] }],
+    nextLink: 'https://management.azure.com/sku-next-page'
+  }]) {
+    value.sessionHosts.sessionHostsRegionSection.resourceSkusApi = response;
+    assert.deepEqual(uiEvaluate(control('option').constraints.allowedValues, value).map(item => item.value),
+      ['AvailabilityZones', 'None']);
+    assert.equal(defaultValue('option', value), 'AvailabilityZones');
+    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
+      ['1', '2', '3']);
+  }
+  assert.equal(JSON.stringify(form).includes('resourceSkusApi'), false);
+});
+
+test('pending, failed and missing regional zone lookups show a warning without silently selecting regional deployment', () => {
+  const value = state();
+  for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
+    { value: [{ name: 'eastus2', availabilityZoneMappings: [] }] },
+    { value: [{ name: 'mexicocentral' }] },
+    { value: [{ name: 'mexicocentral', availabilityZoneMappings: [] }] }]) {
+    value.sessionHosts.sessionHostsRegionSection.locationZonesApi = response;
+    assert.equal(defaultValue('option', value), 'AvailabilityZones');
+    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value), []);
+    assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), true);
+    assert.equal(control('availabilityZones').constraints.required, true);
+  }
+  value.sessionHosts.sessionHostsAvailabilitySection.option = 'None';
+  assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
+});
+
+test('regional lookup is scoped to the selected subscription and never uses the metadata region for Mexico VM zones', () => {
+  const value = state();
+  assert.equal(uiEvaluate(control('locationZonesApi').request.path, value),
+    `/subscriptions/${value.basics.resourceScope.subscription.subscriptionId}/locations?api-version=2022-12-01`);
+  assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
+});
+
+test('a region not selected yet leaves required zones empty and shows the lookup warning', () => {
+  const value = state();
+  for (const region of [undefined, null, '']) {
+    value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = region;
+    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value), []);
+    assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), true);
+  }
+});
+
+test('zonal selection explicitly requires VM-size verification instead of claiming regional mappings prove SKU availability', () => {
+  const value = state();
+  assert.equal(uiEvaluate(control('availabilityZonesSkuWarning').visible, value), true);
+  assert.equal(uiEvaluate(control('confirmZonalSkuAvailability').visible, value), true);
+  assert.equal(control('confirmZonalSkuAvailability').constraints.required, true);
+  assert.equal(Object.hasOwn(control('confirmZonalSkuAvailability'), 'defaultValue'), false);
+  value.sessionHosts.sessionHostsAvailabilitySection.option = 'None';
+  assert.equal(uiEvaluate(control('availabilityZonesSkuWarning').visible, value), false);
+  assert.equal(uiEvaluate(control('confirmZonalSkuAvailability').visible, value), false);
 });
 
 test('Marketplace filtering retains both single-session Enterprise and multi-session choices', () => {
@@ -354,14 +421,56 @@ test('every form parameter output exists in the compiled template and subscripti
   const value = state();
   assert.equal(form.view.outputs.kind, 'Subscription');
   assert.equal(uiEvaluate(form.view.outputs.location, value), 'eastus2');
-  assert.equal(uiEvaluate(form.view.outputs.subscriptionId, value), value.basics.subscription.subscriptionId);
-  assert.equal(output('avdWorkloadSubsId', value), value.basics.subscription.subscriptionId);
-  assert.equal(JSON.stringify(form).includes('resourceScope'), false);
+  assert.equal(uiEvaluate(form.view.outputs.subscriptionId, value), value.basics.resourceScope.subscription.subscriptionId);
+  assert.equal(output('avdWorkloadSubsId', value), value.basics.resourceScope.subscription.subscriptionId);
+  assert.equal(control('resourceScope').type, 'Microsoft.Common.ResourceScope');
   for (const name of ['avdVirtualNetworkSelectorId', 'privateEndpointVirtualNetworkSelectorId',
     'alaWorkspaceExistingWorkspacesSelection']) {
     const element = control(name);
-    assert.equal(uiEvaluate(element.scope.subscriptionId, value), value.basics.subscription.subscriptionId);
+    assert.equal(uiEvaluate(element.scope.subscriptionId, value), value.basics.resourceScope.subscription.subscriptionId);
   }
+});
+
+test('review uses the composite deployment location without changing either AVD resource region', () => {
+  const value = state();
+  value.basics.resourceScope.location = { name: 'westus2', displayName: 'West US 2' };
+  assert.equal(uiEvaluate(form.view.outputs.location, value), 'westus2');
+  assert.equal(output('avdManagementPlaneLocation', value), 'eastus2');
+  assert.equal(output('avdSessionHostLocation', value), 'mexicocentral');
+  value.basics.resourceScope.location = undefined;
+  assert.equal(uiEvaluate(form.view.outputs.location, value), undefined);
+});
+
+test('pending region-provider responses cannot dereference missing location data', () => {
+  const value = state();
+  for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
+    { value: [{ resourceType: 'workspaces' }, { resourceType: 'virtualMachines' }] }]) {
+    value.basics.managementPlaneApi = response;
+    value.sessionHosts.sessionHostsRegionSection.computeApi = response;
+    assert.deepEqual(uiEvaluate(control('managementPlaneLocation').constraints.allowedValues, value), []);
+    assert.deepEqual(uiEvaluate(control('sessionHostsRegion').constraints.allowedValues, value), []);
+    assert.equal(control('managementPlaneLocation').constraints.required, true);
+    assert.equal(control('sessionHostsRegion').constraints.required, true);
+  }
+});
+
+test('disabled storage and missing zone mappings do not read an undefined location during review', () => {
+  const value = state();
+  assert.deepEqual(uiEvaluate(control('storageGeneralSettingsZoneRedundancy').constraints.allowedValues, value),
+    [{ label: 'Locally Redundant Storage', value: false }]);
+  assert.equal(uiEvaluate(control('storageApi').condition, value), false);
+  value.storage.storageFslogix.fslogixDeployment = true;
+  for (const response of [undefined, {}, { value: [] }, { value: [{ resourceType: 'storageAccounts' }] },
+    { value: [{ resourceType: 'storageAccounts', zoneMappings: [undefined, {}, { zones: ['1', '2', '3'] }] }] }]) {
+    value.storage.storageGeneralSettings.storageApi = response;
+    assert.deepEqual(uiEvaluate(control('storageGeneralSettingsZoneRedundancy').constraints.allowedValues, value),
+      [{ label: 'Locally Redundant Storage', value: false }]);
+  }
+  value.storage.storageGeneralSettings.storageApi = { value: [{
+    resourceType: 'storageAccounts', zoneMappings: [{ location: 'Mexico Central', zones: ['1', '2', '3'] }]
+  }] };
+  assert.deepEqual(uiEvaluate(control('storageGeneralSettingsZoneRedundancy').constraints.allowedValues, value),
+    [{ label: 'Locally Redundant Storage', value: false }, { label: 'Zone-Redundant Storage', value: true }]);
 });
 
 test('credentials and tenant-specific enterprise application IDs remain customer inputs', () => {
