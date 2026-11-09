@@ -23,7 +23,8 @@ function control(name) {
 
 // Evaluate the saved expressions, not a separately reimplemented deployment decision.
 // This limited interpreter is an offline contract check, not the Portal runtime.
-function evaluate(expression, functions) {
+// Eager mode checks Portal branches; ARM expressions retain lazy if evaluation.
+function evaluate(expression, functions, eagerIf = false) {
   if (typeof expression !== 'string' || !expression.startsWith('[') ||
       !expression.endsWith(']') || expression.startsWith('[[')) return expression;
   const body = expression.slice(1, -1);
@@ -91,6 +92,10 @@ function evaluate(expression, functions) {
       return value => run(node.body, { ...locals, [node.parameter]: value });
     }
     if (node.name === 'if') {
+      if (eagerIf) {
+        const [condition, whenTrue, whenFalse] = node.args.map(arg => run(arg, locals));
+        return condition ? whenTrue : whenFalse;
+      }
       return run(node.args[0], locals) ? run(node.args[1], locals) : run(node.args[2], locals);
     }
     assert.ok(Object.hasOwn(functions, node.name), `Unsupported function ${node.name}`);
@@ -142,11 +147,16 @@ const functions = {
     `/subscriptions/${subscription}/resourceGroups/${group}/providers/${type}/${name}`
 };
 
-const uiEvaluate = (expression, state) => evaluate(expression, {
+const uiEvaluate = (expression, state, eagerIf = false) => evaluate(expression, {
   ...functions,
   string: value => JSON.stringify(value === undefined ? null : value),
+  int: value => {
+    assert.ok(typeof value === 'string' || typeof value === 'number',
+      'Portal int cannot coerce an entire zone array.');
+    return functions.int(value);
+  },
   steps: name => state[name]
-});
+}, eagerIf);
 
 function defaultValue(name, state) {
   const element = control(name);
@@ -348,6 +358,33 @@ test('regional and no-session-host modes output an empty zone array', () => {
   assert.deepEqual(output('availabilityZones', value), []);
 });
 
+test('zone output is safe when Portal eagerly evaluates both if branches', () => {
+  const expression = form.view.outputs.parameters.availabilityZones;
+  for (const [selection, expected] of [
+    [1, ['1']], ['1', ['1']], [['1'], ['1']],
+    [['1', '2'], ['1', '2']], [[1, 2, 3], ['1', '2', '3']]
+  ]) {
+    const value = state();
+    value.sessionHosts.sessionHostsAvailabilitySection.availabilityZones = selection;
+    assert.deepEqual(uiEvaluate(expression, value, true), expected);
+  }
+  for (const [deployHosts, availability] of [
+    [true, 'None'], [false, 'None'], [false, 'AvailabilityZones']
+  ]) {
+    const value = state();
+    value.sessionHosts.deploySessionHosts = deployHosts;
+    value.sessionHosts.sessionHostsAvailabilitySection.option = availability;
+    value.sessionHosts.sessionHostsAvailabilitySection.availabilityZones = undefined;
+    assert.deepEqual(uiEvaluate(expression, value, true), []);
+  }
+});
+
+test('Portal eager branch regression rejects array int even when its branch is not selected', () => {
+  const expression = `[if(true, 'selected', int(parse('["1","2"]')))]`;
+  assert.throws(() => uiEvaluate(expression, {}, true), /entire zone array/);
+  assert.equal(evaluate(expression, functions), 'selected');
+});
+
 test('native zone choices are literal string identifiers matching the compiled array contract', () => {
   const allowed = control('availabilityZones').constraints.allowedValues;
   assert.ok(Array.isArray(allowed), 'Zone choices must not be a Portal expression.');
@@ -438,10 +475,13 @@ test('missing or paged SKU data cannot remove Availability Zones or change the z
   assert.equal(JSON.stringify(form).includes('resourceSkusApi'), false);
 });
 
-test('native zone defaults select 1 and 2 without lookup or default expressions', () => {
+test('native zone defaults use upstream label-based initialization and select IDs 1 and 2', () => {
   const value = state();
   const element = control('availabilityZones');
-  assert.deepEqual(element.defaultValue, [{ value: '1' }, { value: '2' }]);
+  assert.deepEqual(element.defaultValue, ['Zone 1', 'Zone 2']);
+  assert.ok(element.defaultValue.every(label =>
+    typeof label === 'string' && element.constraints.allowedValues.some(item => item.label === label)),
+    'Use the original accelerator label format, not object-valued defaults.');
   assert.equal(element.multiselect, true);
   assert.equal(element.selectAll, true);
   assert.equal(element.constraints.required, true);
