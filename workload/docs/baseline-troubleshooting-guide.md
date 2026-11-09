@@ -16,6 +16,14 @@ The baseline now defaults `avdWorkloadSubsId` to `subscription().subscriptionId`
 
 With the corrected template, remove an old `"avdWorkloadSubsId": { "value": "" }` entry from a JSON parameter file to inherit the deployment selection, or replace it with the intended GUID for an explicit override. Do not supply `/subscriptions/<guid>` as this parameter. An explicit empty string is not equivalent to omitting the parameter and does not activate its default; see the [subscriptionResourceId reference](https://learn.microsoft.com/azure/azure-resource-manager/templates/template-functions-resource#subscriptionresourceid). Reopen the corrected deployment link rather than reusing an old saved blank payload. Offline validation does not establish a successful customer deployment.
 
+## InvalidTemplate: deploymentPrefix does not meet the minimum length
+
+The baseline's `deploymentPrefix` requires 2-4 characters. The **Basics > Deployment Specs > Prefix** text box now validates the same range; it previously allowed a single character even though ARM required at least two. The field remains required and exports the entered text directly. No replacement prefix, trimming or truncation is applied.
+
+If the visible prefix already contains 2-4 characters, that form-validation mismatch does **not** explain the submitted value. Inspect only the presence, type and character count of `parameters.deploymentPrefix.value` in the final Portal `validate` request, and confirm the template/form version. Do not share the full request or parameter file: it can contain administrator and domain-join credentials. A failed `Microsoft.Resources/deployments/validate/action` can appear in Activity Log without creating a deployment-history entry, even when triggered by clicking **Create**; Activity Log's error does not expose the submitted parameter value.
+
+Use the fresh, commit-pinned form and keep the original prefix for an existing deployment. Changing a valid prefix changes generated resource names and is not a fix for a lost parameter. Source alignment and isolated Portal serialization checks are not proof that a particular customer's final request retained the input.
+
 ## InvalidParameter: osProfile.adminUsername is missing
 
 This error means the VM received no usable local administrator username. It does not by itself identify why the input was lost or prove an RBAC or Entra join problem. In **Identity provider > Session host local admin credentials**, provide the required **Username** and password, even when Microsoft Entra ID is the identity provider. Supply a local account name, not an Entra UPN. For an existing VM, use its original administrator username; this is not an in-place account rename.

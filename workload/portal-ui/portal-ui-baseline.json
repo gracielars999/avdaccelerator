@@ -80,12 +80,12 @@
 									"name": "deploymentPrefix",
 									"type": "Microsoft.Common.TextBox",
 									"label": "Prefix",
-									"toolTip": "Provide a prefix (max 4 characters) for the resource groups and resources created as part of Azure Virtual Desktop landing zones.",
+									"toolTip": "Provide a prefix of 2-4 letters, numbers or hyphens for the resource groups and resources created as part of Azure Virtual Desktop landing zones. Reuse the original prefix when redeploying existing resources.",
 									"placeholder": "Example: app1",
 									"constraints": {
 										"required": true,
-										"regex": "^[a-z0-9A-Z-]{1,4}$",
-										"validationMessage": "The prefix must be 1-4 characters."
+										"regex": "^[a-z0-9A-Z-]{2,4}$",
+										"validationMessage": "The prefix must be 2-4 characters."
 									}
 								},
 								{

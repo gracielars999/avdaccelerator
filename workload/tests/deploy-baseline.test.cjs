@@ -332,6 +332,40 @@ test('Multiva form defaults produce the matching compiled template values', () =
   }), 'Enabled');
 });
 
+test('deployment prefix form validation matches the compiled template length limits', () => {
+  const element = control('deploymentPrefix');
+  const parameter = template.parameters.deploymentPrefix;
+  assert.equal(element.type, 'Microsoft.Common.TextBox');
+  assert.equal(element.constraints.required, true);
+  assert.equal(Object.hasOwn(element, 'defaultValue'), false,
+    'Do not substitute a naming prefix for the value the user must enter.');
+  assert.equal(parameter.type, 'string');
+  assert.equal(parameter.minLength, 2);
+  assert.equal(parameter.maxLength, 4);
+  assert.equal(parameter.defaultValue, 'AVD1');
+  const pattern = new RegExp(element.constraints.regex);
+  for (const prefix of ['', 'a', 'ab', 'app', 'AVD1', '1234', 'a-', 'abcde']) {
+    assert.equal(pattern.test(prefix),
+      prefix.length >= parameter.minLength && prefix.length <= parameter.maxLength,
+      JSON.stringify(prefix));
+  }
+  for (const prefix of ['a b', ' ab', 'ab ', 'a_b', 'a.b']) {
+    assert.equal(pattern.test(prefix), false, JSON.stringify(prefix));
+  }
+  assert.match(element.constraints.validationMessage, /2-4/);
+});
+
+test('deployment prefix output preserves entered values without a fallback or truncation', () => {
+  const value = state();
+  for (const prefix of ['ab', 'app', 'AVD1', '12', '', 'a', 'abcde', ' ab']) {
+    value.basics.deploymentSpecs = { deploymentPrefix: prefix };
+    const result = uiEvaluate(form.view.outputs.parameters.deploymentPrefix, value, true);
+    assert.equal(result, prefix);
+    const context = armContext(template, { deploymentPrefix: result });
+    assert.equal(context.variables('varDeploymentPrefixLowercase'), prefix.toLowerCase());
+  }
+});
+
 test('Personal form output uses Persistent and Pooled retains the selected balancing algorithm', () => {
   const value = state();
   const settings = value.managementPlane.managementPlaneHostPoolSettings;
