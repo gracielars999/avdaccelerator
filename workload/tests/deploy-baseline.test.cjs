@@ -707,12 +707,24 @@ test('disabled storage and missing zone mappings do not read an undefined locati
     [{ label: 'Locally Redundant Storage', value: false }, { label: 'Zone-Redundant Storage', value: true }]);
 });
 
-test('the required Windows admin field reaches Key Vault and the VM OS profile for every identity provider', () => {
+test('the original required local admin text box reaches Key Vault and the VM OS profile for every identity provider', () => {
   const field = control('identityLocalUserName');
-  assert.equal(field.type, 'Microsoft.Compute.UserNameTextBox');
-  assert.equal(field.osPlatform, 'Windows');
-  assert.equal(field.constraints.required, true);
-  assert.equal(field.defaultValue, '');
+  // Keep the control contract from Azure/avdaccelerator@4ab656e10a8ee7eac861c235675c86e4d1abd7f4.
+  assert.deepEqual(field, {
+    name: 'identityLocalUserName',
+    type: 'Microsoft.Common.TextBox',
+    label: 'Username',
+    toolTip: "Provide username for session host local admin account. Administrator can't be used as username, it is reserved by the system.",
+    placeholder: "Example: 'localadmin'",
+    defaultValue: '',
+    constraints: {
+      regex: '^(?!.*[aA]dministrator).*$',
+      validationMessage: "This username can't be used, it is a reserved word.",
+      required: true
+    }
+  });
+  assert.equal(form.view.outputs.parameters.avdVmLocalUserName,
+    "[steps('identity').identityLocalCredentials.identityLocalUserName]");
   assert.equal(control('identityLocalCredentials').visible, true);
   const vault = template.resources.find(resource => resource.name?.includes('Workload-KeyVault-'));
   assert.ok(vault?.properties.parameters.secrets, 'Check the generated local credential secret inputs.');
@@ -720,6 +732,8 @@ test('the required Windows admin field reaches Key Vault and the VM OS profile f
   for (const provider of ['ADDS', 'EntraDS', 'EntraID', 'EntraIDKerberos']) {
     const value = state();
     value.identity = {
+      identityDomainInformation: { identityServiceProvider: provider },
+      identityDomainCredentials: { identityDomainJoinUserName: 'domainjoin@example.invalid' },
       identityLocalCredentials: {
         identityLocalUserName: 'testlocaladmin',
         identityLocalUserPassword: { authenticationType: 'password', password: 'test-fixture-only-A1!' }
@@ -748,6 +762,27 @@ test('the required Windows admin field reaches Key Vault and the VM OS profile f
   for (const call of calls) {
     assert.equal(call.properties.parameters.adminUsername.reference.secretName, 'vmLocalUserName');
     assert.equal(call.properties.parameters.adminPassword.reference.secretName, 'vmLocalUserPassword');
+  }
+});
+
+test('the local admin placeholder and domain join account never substitute for required local credentials', () => {
+  for (const provider of ['ADDS', 'EntraDS', 'EntraID', 'EntraIDKerberos']) {
+    const value = state();
+    value.identity = {
+      identityDomainInformation: { identityServiceProvider: provider },
+      identityDomainCredentials: { identityDomainJoinUserName: 'domainjoin@example.invalid' },
+      identityLocalCredentials: {
+        identityLocalUserName: control('identityLocalUserName').defaultValue,
+        identityLocalUserPassword: { authenticationType: 'password', password: 'test-fixture-only-A1!' }
+      }
+    };
+    assert.equal(output('avdVmLocalUserName', value), '', provider);
+    assert.equal(control('identityLocalUserName').constraints.required, true);
+    assert.equal(template.parameters.avdVmLocalUserName.minLength, 1);
+    value.identity.identityLocalCredentials.identityLocalUserName = 'testlocaladmin';
+    assert.equal(output('avdVmLocalUserName', value), 'testlocaladmin', provider);
+    assert.notEqual(output('avdVmLocalUserName', value),
+      value.identity.identityDomainCredentials.identityDomainJoinUserName, provider);
   }
 });
 

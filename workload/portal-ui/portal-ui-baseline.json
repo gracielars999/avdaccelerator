@@ -322,11 +322,11 @@
 							"elements": [
 								{
 									"name": "identityLocalUserName",
-									"type": "Microsoft.Compute.UserNameTextBox",
-									"label": "Local administrator username",
-									"toolTip": "Required local Windows administrator for every session host, including Microsoft Entra ID-joined VMs. Enter the local account name, not a UPN. For an existing VM, use its original administrator username.",
+									"type": "Microsoft.Common.TextBox",
+									"label": "Username",
+									"toolTip": "Provide username for session host local admin account. Administrator can't be used as username, it is reserved by the system.",
+									"placeholder": "Example: 'localadmin'",
 									"defaultValue": "",
-									"osPlatform": "Windows",
 									"constraints": {
 										"regex": "^(?!.*[aA]dministrator).*$",
 										"validationMessage": "This username can't be used, it is a reserved word.",
