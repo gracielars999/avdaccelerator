@@ -127,9 +127,14 @@ param avdPersonalAssignType string = 'Automatic'
 @allowed([
   'BreadthFirst'
   'DepthFirst'
+  'Persistent'
 ])
-@sys.description('AVD host pool load balacing type. (Default: BreadthFirst)')
-param avdHostPoolLoadBalancerType string = 'BreadthFirst'
+// Keep PSDocs examples from pinning a host-pool-dependent default.
+@sys.metadata({
+  ignore: true
+})
+@sys.description('AVD host pool load balancing type. Personal always uses Persistent; Pooled defaults to BreadthFirst and can select DepthFirst.')
+param avdHostPoolLoadBalancerType string = avdHostPoolType == 'Personal' ? 'Persistent' : 'BreadthFirst'
 
 @sys.description('AVD host pool maximum number of user sessions per session host. (Default: 8)')
 param hostPoolMaxSessions int = 8

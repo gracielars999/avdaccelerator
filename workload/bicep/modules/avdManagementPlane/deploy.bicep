@@ -123,8 +123,9 @@ param personalAssignType string
 @allowed([
   'BreadthFirst'
   'DepthFirst'
+  'Persistent'
 ])
-@sys.description('AVD host pool load balacing type.')
+@sys.description('AVD host pool load balancing type. Personal always uses Persistent; Pooled uses the selected BreadthFirst or DepthFirst algorithm.')
 param hostPoolLoadBalancerType string
 
 @sys.description('Optional. AVD host pool maximum number of user sessions per session host.')
@@ -241,7 +242,7 @@ module hostPool '../../../../avm/1.0.0/res/desktop-virtualization/host-pool/main
     hostPoolType: hostPoolType
     startVMOnConnect: startVmOnConnect
     customRdpProperty: varHostPoolRdpPropertiesDomainServiceCheck
-    loadBalancerType: hostPoolLoadBalancerType
+    loadBalancerType: hostPoolType == 'Personal' ? 'Persistent' : hostPoolLoadBalancerType
     maxSessionLimit: hostPoolMaxSessions
     preferredAppGroupType: preferredAppGroupType
     personalDesktopAssignmentType: personalAssignType

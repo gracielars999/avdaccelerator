@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "16688764961533391281"
+      "templateHash": "4461862382898678692"
     },
     "name": "AVD Accelerator - Multiva Baseline Deployment",
     "description": "Multiva baseline with Mexico Central session hosts and East US 2 AVD service objects",
@@ -215,13 +215,15 @@
     },
     "avdHostPoolLoadBalancerType": {
       "type": "string",
-      "defaultValue": "BreadthFirst",
+      "defaultValue": "[if(equals(parameters('avdHostPoolType'), 'Personal'), 'Persistent', 'BreadthFirst')]",
       "allowedValues": [
         "BreadthFirst",
-        "DepthFirst"
+        "DepthFirst",
+        "Persistent"
       ],
       "metadata": {
-        "description": "AVD host pool load balacing type. (Default: BreadthFirst)"
+        "ignore": true,
+        "description": "AVD host pool load balancing type. Personal always uses Persistent; Pooled defaults to BreadthFirst and can select DepthFirst."
       }
     },
     "hostPoolMaxSessions": {
@@ -8757,7 +8759,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "9032654450222445698"
+              "templateHash": "8495494540561241867"
             },
             "name": "AVD LZA management plane",
             "description": "This module deploys AVD workspace, host pool, application group scaling plan",
@@ -8974,10 +8976,11 @@
               "type": "string",
               "allowedValues": [
                 "BreadthFirst",
-                "DepthFirst"
+                "DepthFirst",
+                "Persistent"
               ],
               "metadata": {
-                "description": "AVD host pool load balacing type."
+                "description": "AVD host pool load balancing type. Personal always uses Persistent; Pooled uses the selected BreadthFirst or DepthFirst algorithm."
               }
             },
             "hostPoolMaxSessions": {
@@ -9070,9 +9073,7 @@
                   "customRdpProperty": {
                     "value": "[variables('varHostPoolRdpPropertiesDomainServiceCheck')]"
                   },
-                  "loadBalancerType": {
-                    "value": "[parameters('hostPoolLoadBalancerType')]"
-                  },
+                  "loadBalancerType": "[if(equals(parameters('hostPoolType'), 'Personal'), createObject('value', 'Persistent'), createObject('value', parameters('hostPoolLoadBalancerType')))]",
                   "maxSessionLimit": {
                     "value": "[parameters('hostPoolMaxSessions')]"
                   },

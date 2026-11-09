@@ -29,7 +29,7 @@ hostPoolPreferredAppGroupType | No       | Optional. The type of preferred appli
 hostPoolPublicNetworkAccess | No       | Enables or Disables public network access on the host pool. Defaults to EnabledForClientsOnly with AVD private endpoints, otherwise Enabled.
 workspacePublicNetworkAccess | No       | Default to Enabled. Enables or Disables public network access on the workspace.
 avdPersonalAssignType | No       | AVD host pool type. (Default: Automatic)
-avdHostPoolLoadBalancerType | No       | AVD host pool load balacing type. (Default: BreadthFirst)
+avdHostPoolLoadBalancerType | No       | AVD host pool load balancing type. Personal always uses Persistent; Pooled defaults to BreadthFirst and can select DepthFirst.
 hostPoolMaxSessions | No       | AVD host pool maximum number of user sessions per session host. (Default: 8)
 avdStartVmOnConnect | No       | AVD host pool start VM on Connect. (Default: true)
 avdHostPoolRdpProperties | No       | AVD host pool Custom RDP properties. (Default: audiocapturemode:i:1;audiomode:i:0;drivestoredirect:s:;redirectclipboard:i:1;redirectcomports:i:1;redirectprinters:i:1;redirectsmartcards:i:1;screen mode id:i:2)
@@ -323,11 +323,11 @@ AVD host pool type. (Default: Automatic)
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD host pool load balacing type. (Default: BreadthFirst)
+AVD host pool load balancing type. Personal always uses Persistent; Pooled defaults to BreadthFirst and can select DepthFirst.
 
-- Default value: `BreadthFirst`
+- Default value: `[if(equals(parameters('avdHostPoolType'), 'Personal'), 'Persistent', 'BreadthFirst')]`
 
-- Allowed values: `BreadthFirst`, `DepthFirst`
+- Allowed values: `BreadthFirst`, `DepthFirst`, `Persistent`
 
 ### hostPoolMaxSessions
 
@@ -1241,9 +1241,6 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
         },
         "avdPersonalAssignType": {
             "value": "Automatic"
-        },
-        "avdHostPoolLoadBalancerType": {
-            "value": "BreadthFirst"
         },
         "hostPoolMaxSessions": {
             "value": 8

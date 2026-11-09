@@ -205,6 +205,7 @@ function state() {
     monitoring: {}
   };
   value.managementPlane.managementPlaneHostPoolSettings.hostPoolType = defaultValue('hostPoolType', value);
+  value.managementPlane.managementPlaneHostPoolSettings.loadBalancerType = defaultValue('loadBalancerType', value);
   value.sessionHosts.deploySessionHosts = defaultValue('deploySessionHosts', value);
   const hosts = value.sessionHosts;
   hosts.sessionHostsRegionSection.sessionHostsRegion = defaultValue('sessionHostsRegion', value);
@@ -235,6 +236,12 @@ const templates = [...objects(template)].filter(value => value.$schema && value.
 const vmTemplates = templates.filter(value => value.parameters.adminUsername && value.parameters.dataDisks);
 const hostsTemplate = templates.find(value => value.variables?.copy?.some(item => item.name === 'varZones'));
 const hostsDeployment = template.resources.find(value => value.properties?.template === hostsTemplate);
+const managementTemplate = templates.find(value => value.parameters.hostPoolLoadBalancerType);
+const managementDeployment = template.resources.find(value => value.properties?.template === managementTemplate);
+const hostPoolDeployment = managementTemplate?.resources.find(value =>
+  Object.values(value.properties?.template?.resources ?? {}).some(resource =>
+    resource.type === 'Microsoft.DesktopVirtualization/hostPools'));
+const hostPoolTemplate = hostPoolDeployment?.properties.template;
 const policyTemplate = templates.find(value => value.variables?.varCustomPolicySetDefinitions);
 const workloadSubscriptionDependency = template.resources.flatMap(value => value.dependsOn ?? [])
   .find(value => value.startsWith("[subscriptionResourceId(parameters('avdWorkloadSubsId'),"));
@@ -323,6 +330,67 @@ test('Multiva form defaults produce the matching compiled template values', () =
   assert.equal(evaluate(template.parameters.hostPoolPublicNetworkAccess.defaultValue, {
     ...functions, parameters: () => false
   }), 'Enabled');
+});
+
+test('Personal form output uses Persistent and Pooled retains the selected balancing algorithm', () => {
+  const value = state();
+  const settings = value.managementPlane.managementPlaneHostPoolSettings;
+  const expression = form.view.outputs.parameters.avdHostPoolLoadBalancerType;
+  assert.equal(uiEvaluate(control('loadBalancerType').visible, value), false);
+  for (const hiddenValue of [undefined, 'BreadthFirst', 'DepthFirst']) {
+    settings.loadBalancerType = hiddenValue;
+    assert.equal(uiEvaluate(expression, value, true), 'Persistent');
+  }
+  settings.hostPoolType = 'Pooled';
+  assert.equal(uiEvaluate(control('loadBalancerType').visible, value), true);
+  assert.deepEqual(control('loadBalancerType').constraints.allowedValues.map(item => item.value),
+    ['BreadthFirst', 'DepthFirst']);
+  for (const algorithm of ['BreadthFirst', 'DepthFirst']) {
+    settings.loadBalancerType = algorithm;
+    assert.equal(uiEvaluate(expression, value, true), algorithm);
+    settings.hostPoolType = 'Personal';
+    assert.equal(uiEvaluate(expression, value, true), 'Persistent');
+    settings.hostPoolType = 'Pooled';
+    assert.equal(uiEvaluate(expression, value, true), algorithm);
+  }
+});
+
+test('compiled defaults and legacy parameter values reach the host-pool resource with a valid type pairing', () => {
+  assert.ok(managementDeployment && hostPoolDeployment && hostPoolTemplate);
+  const hostPool = Object.values(hostPoolTemplate.resources).find(value =>
+    value.type === 'Microsoft.DesktopVirtualization/hostPools');
+  for (const [parameters, hostPoolType, expected] of [
+    [{}, 'Personal', 'Persistent'],
+    [{ avdHostPoolType: 'Personal', avdHostPoolLoadBalancerType: 'BreadthFirst' }, 'Personal', 'Persistent'],
+    [{ avdHostPoolType: 'Personal', avdHostPoolLoadBalancerType: 'DepthFirst' }, 'Personal', 'Persistent'],
+    [{ avdHostPoolType: 'Personal', avdHostPoolLoadBalancerType: 'Persistent' }, 'Personal', 'Persistent'],
+    [{ avdHostPoolType: 'Pooled' }, 'Pooled', 'BreadthFirst'],
+    [{ avdHostPoolType: 'Pooled', avdHostPoolLoadBalancerType: 'BreadthFirst' }, 'Pooled', 'BreadthFirst'],
+    [{ avdHostPoolType: 'Pooled', avdHostPoolLoadBalancerType: 'DepthFirst' }, 'Pooled', 'DepthFirst']
+  ]) {
+    const root = armContext(template, parameters);
+    const forwarded = root.evaluate(managementDeployment.properties.parameters.hostPoolLoadBalancerType.value);
+    assert.ok(template.parameters.avdHostPoolLoadBalancerType.allowedValues.includes(forwarded));
+    assert.ok(managementTemplate.parameters.hostPoolLoadBalancerType.allowedValues.includes(forwarded));
+    const management = armContext(managementTemplate, {
+      hostPoolType: root.evaluate(managementDeployment.properties.parameters.hostPoolType.value),
+      hostPoolLoadBalancerType: forwarded
+    });
+    const resource = armContext(hostPoolTemplate, {
+      hostPoolType: management.evaluate(hostPoolDeployment.properties.parameters.hostPoolType).value,
+      loadBalancerType: management.evaluate(hostPoolDeployment.properties.parameters.loadBalancerType).value
+    });
+    assert.equal(resource.evaluate(hostPool.properties.hostPoolType), hostPoolType);
+    assert.equal(resource.evaluate(hostPool.properties.loadBalancerType), expected, JSON.stringify(parameters));
+  }
+});
+
+test('parameter samples inherit the host-pool-dependent balancing default', () => {
+  for (const name of ['deploy-baseline-all.bicepparam', 'deploy-baseline-required-only.bicepparam']) {
+    assert.doesNotMatch(read('workload', 'bicep', 'parameters', name),
+      /^param avdHostPoolLoadBalancerType\s*=/m, name);
+  }
+  assert.equal(template.parameters.avdHostPoolLoadBalancerType.metadata.ignore, true);
 });
 
 test('Portal string conversion JSON-encodes existing strings unlike ARM string conversion', () => {
@@ -671,14 +739,16 @@ test('baseline parameter samples inherit the selected subscription instead of se
   }
 });
 
-test('generated JSON parameter examples omit the ARM-evaluated subscription default', () => {
+test('generated JSON parameter examples omit subscription and host-pool-dependent defaults', () => {
   const reference = read('workload', 'docs', 'autoGenerated', 'deploy-baseline.bicep.md');
   const samples = [...reference.matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)]
     .map(match => JSON.parse(match[1]));
   const parameters = samples.find(value => value.$schema?.includes('deploymentParameters.json'));
   assert.ok(parameters, 'Check the generated JSON parameter-file example, not only the parameter description.');
   assert.equal(Object.hasOwn(parameters.parameters, 'avdWorkloadSubsId'), false);
+  assert.equal(Object.hasOwn(parameters.parameters, 'avdHostPoolLoadBalancerType'), false);
   assert.match(reference, /avdWorkloadSubsId \| No\s+\|/);
+  assert.match(reference, /avdHostPoolLoadBalancerType \| No\s+\|/);
 });
 
 test('one editable native region drives both deployment review and AVD management while VM location stays separate', () => {

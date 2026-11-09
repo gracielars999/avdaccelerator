@@ -58,6 +58,14 @@ The [DropDown documentation](https://learn.microsoft.com/azure/azure-resource-ma
 
 A separate output-conversion failure was reproduced with Portal's actual expression evaluator: unlike ARM, its `if()` evaluates both branches. The previous zone expression called `int()` on the whole array in its unselected scalar branch, which throws even for the default zones `["1", "2"]`. In isolated production-mode replay, the serializer returned an empty parameter object even with a populated synthetic local username. The corrected expression selects JSON text first, parses the selected text once, and only converts individual IDs inside `map()`. Offline checks exercise eager branches as well as native dropdown initialization and parameter conversion; they do not establish the inner exception behind the customer's control-construction message.
 
+## Invalid LoadBalancer and Hostpool Type combination
+
+`LoadBalancerType: BreadthFirst not consistent with HostPoolType: Personal` is a host-pool property mismatch, not an RBAC, VM-region or session-host image error. Personal pools require `Persistent`. `BreadthFirst` and `DepthFirst` apply to Pooled pools, as shown in [Microsoft's host-pool creation examples](https://learn.microsoft.com/azure/virtual-desktop/deploy-azure-virtual-desktop).
+
+The form now exports `Persistent` for Personal even though its hidden Pooled algorithm selector retains its own default. The baseline's parameter default also follows the selected pool type, and the management-plane module enforces `Persistent` before calling the host-pool module, including when a saved Personal payload still contains `BreadthFirst` or `DepthFirst`. Pooled defaults and explicit `DepthFirst` choices are preserved.
+
+Open the newly published template and form together. An old tab, commit-pinned link or deployment-history **Redeploy** retains the old definition and may still forward the incompatible value. Keep the intended Personal pool type; do not convert an existing pool to Pooled or delete customer resources to bypass the error. This source correction is not evidence that a customer deployment has completed successfully.
+
 ## AADLoginForWindows: Entra device join failed
 
 A failure of the `AADLogin` extension (`Microsoft.Azure.ActiveDirectory/AADLoginForWindows`) is an Entra device-join failure, not a monitoring-policy deployment failure. The reported signed status `-2145648526` converts to HRESULT `0x801C0072`; that value alone does not establish a permissions, networking, image or Intune root cause. Do not substitute the documented meanings of other HRESULTs. "Device successfully unjoined" describes cleanup after the failure, not a successful join.

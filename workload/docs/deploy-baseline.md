@@ -9,6 +9,7 @@ The commercial baseline in this fork is the Multiva-specific version of the upst
 | Deployment record and AVD service objects / management plane | One editable region on Basics; select East US 2 (`eastus2`) for Multiva |
 | Session hosts and workload network | Mexico Central (`mexicocentral`) |
 | Host pool | Personal, automatic assignment |
+| Host pool routing | `Persistent` for Personal; Pooled defaults to `BreadthFirst` and also supports `DepthFirst` |
 | Image | Marketplace, `MicrosoftWindowsDesktop/windows-11/win11-24h2-avd`, latest image version |
 | OS disk | Premium |
 | Availability | Availability Zones, with logical zones 1 and 2 selected; literal template choices are 1, 2 and 3 |
@@ -27,6 +28,8 @@ East US 2 is **not** the VM location. Under AVD's default geographical deploymen
 The Marketplace SKU filter now matches the original accelerator exactly: it includes Windows AVD images and excludes SKU names containing `ent`. The default is therefore **`win11-24h2-avd`**, Windows 11 Enterprise 24H2 **multi-session**, replacing the previous single-session `win11-24h2-ent` choice. The host pool remains **Personal**; assignment type and OS edition are separate settings. Windows-11, the release, FSLogix and monitoring preferences remain unchanged.
 
 Changing an image default does not reimage an existing session host or repair its Entra join. Do not retry an existing VM with a different Marketplace SKU as an in-place image change; plan new hosts separately before modifying customer resources.
+
+Personal host pools always send `Persistent` as the host-pool API's load-balancer type. The algorithm selector is only shown for Pooled pools, where `BreadthFirst` remains the default and `DepthFirst` remains selectable. The template derives its default from the selected pool type, and the management-plane module also enforces `Persistent` for Personal if an older parameter payload still contains `BreadthFirst` or `DepthFirst`. Parameter-file examples inherit this default rather than saving a conflicting value. Do not change an existing pool's type to bypass a validation error; the host-pool type is immutable.
 
 The Availability Option remains selectable independently of VM size discovery. The zone dropdown now contains a **literal** list of template-supported logical IDs **1, 2 and 3**, with **1 and 2** selected for Multiva. It has no region/API expression or zone lookup that can leave its item list empty. This is manual deployment intent, **not automatic availability discovery**: a visible warning and required checkbox still require verifying the selected region, VM size and subscription restrictions. When selecting another VM region, verify that it offers the chosen zones; explicitly choose regional deployment if it does not. The form does not silently change to regional VMs, and these identifiers do not guarantee image/SKU availability, subscription eligibility, quota or capacity.
 

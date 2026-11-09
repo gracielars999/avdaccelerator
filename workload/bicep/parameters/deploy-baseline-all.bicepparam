@@ -24,7 +24,7 @@ param hostPoolPreferredAppGroupType = 'Desktop'
 param hostPoolPublicNetworkAccess = 'EnabledForClientsOnly'
 param workspacePublicNetworkAccess = 'Enabled'
 param avdPersonalAssignType = 'Automatic'
-param avdHostPoolLoadBalancerType = 'BreadthFirst'
+// Inherit the balancing default from the selected host pool type.
 param hostPoolMaxSessions = 8
 param avdStartVmOnConnect = true
 param avdHostPoolRdpProperties = 'audiocapturemode:i:1;audiomode:i:0;drivestoredirect:s:;redirectclipboard:i:1;redirectcomports:i:1;redirectprinters:i:1;redirectsmartcards:i:1;screen mode id:i:2'
