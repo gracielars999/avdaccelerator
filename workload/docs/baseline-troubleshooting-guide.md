@@ -14,7 +14,13 @@ The standard ARM **Edit parameters** screen is not the accelerator's custom mult
 
 The baseline keeps `availabilityZones` as an array, defaults it to `["1", "2"]`, and moves its allowed logical string IDs (`"1"`, `"2"`, `"3"`) to the nested session-host template. This avoids the top-level enum control without removing the nested ARM constraint. The custom form uses literal zone choices and continues to normalize one or multiple selections to an array of strings.
 
-When editing parameters directly, enter `["2"]` for one zone or `["1", "2"]` for two. A parameter file must use `"availabilityZones": { "value": ["1", "2"] }`, not a scalar or comma-separated string. For regional VMs, explicitly set `availability` to `None` and the zone array to `[]`. Reopen the newly published template; old tabs and commit-pinned URLs retain the previous parameter schema. These structural corrections still require a fresh customer Portal test.
+In Portal controls, select plain zone IDs and retain the array input; do not add quote characters to each entry or type a `createArray(...)` expression. A **JSON parameter file** must use `"availabilityZones": { "value": ["1", "2"] }`, not a scalar or comma-separated string. For regional VMs, explicitly set `availability` to `None` and the zone array to `[]`. Reopen the newly published template; old tabs and commit-pinned URLs retain the previous parameter schema. These structural corrections still require a fresh customer Portal test.
+
+## Availability zone validation rejects quoted createArray operands
+
+An `InvalidTemplate` error containing `[createArray('\"1\"', '\"2\"')]` reports IDs with literal quote characters, equivalent to `["\"1\"", "\"2\""]`, rather than the allowed IDs `["1", "2"]`. This is a serialization issue, not a missing Azure role. The Portal's public CreateUiDefinition conversion callback uses JSON serialization for `string()`, so mapping it directly over string IDs adds quotes. The previous offline checks incorrectly reused ARM string-conversion behavior and missed that difference.
+
+The custom form now converts each supported ID to a number before applying `string()`, producing plain string IDs for single and multiple selections. The baseline separately decodes exactly one JSON string layer on edited array entries before nested allowed-ID validation; it does not strip arbitrary characters, evaluate parameter text as ARM expressions, remove the zone constraint, or change the parameter to an integer. Reopen the corrected deployment link instead of reusing an old tab or saved quoted payload. Regression checks replay the quoted operands and the generated per-VM zone assignment; they are not evidence of a successful Azure deployment.
 
 ## AADLoginForWindows: Entra device join failed
 

@@ -237,7 +237,7 @@ param avdSessionHostCountIndex int = 1
 param availability string = 'AvailabilityZones'
 
 // Constrain zone IDs in the session-host module so Portal's generic editor keeps an array input.
-@sys.description('Array of session-host logical zone identifiers as strings. In Edit parameters, enter ["1"] or ["1", "2"], never a scalar. (Default: zones 1 and 2)')
+@sys.description('Array of session-host logical zone identifiers. Select plain zone IDs in Portal controls; JSON parameter files use ["1"] or ["1", "2"], never a scalar or an ARM expression. (Default: zones 1 and 2)')
 param availabilityZones array = ['1', '2']
 
 @sys.description('When true, Zone Redundant Storage (ZRS) is used, when set to false, Locally Redundant Storage (LRS) is used. (Default: false)')
@@ -687,6 +687,10 @@ var varMgmtVmSpecs = {
     ? '${networking.outputs.virtualNetworkResourceId}/subnets/${varVnetAvdSubnetName}'
     : existingVnetAvdSubnetResourceId
 }
+// Decode one JSON string layer; invalid or unknown IDs still fail nested validation.
+var varAvailabilityZones = [
+  for zone in availabilityZones: startsWith(string(zone), '"') ? json(string(zone)) : string(zone)
+]
 var varMaxSessionHostsPerTemplate = 10
 var varMaxSessionHostsDivisionValue = avdDeploySessionHostsCount / varMaxSessionHostsPerTemplate
 var varMaxSessionHostsDivisionRemainderValue = avdDeploySessionHostsCount % varMaxSessionHostsPerTemplate
@@ -1568,7 +1572,7 @@ module sessionHosts './modules/avdSessionHosts/deploy.bicep' = [
         ? '${networking.outputs.applicationSecurityGroupResourceId}'
         : ''
       availability: availability
-      availabilityZones: availabilityZones
+      availabilityZones: varAvailabilityZones
       batchId: i - 1
       computeObjectsRgName: varComputeObjectsRgName
       configureFslogix: createAvdFslogixDeployment

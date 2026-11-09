@@ -65,7 +65,7 @@ alaExistingWorkspaceResourceId | No       | Existing Azure log analytics workspa
 avdDeploySessionHostsCount | No       | Quantity of session hosts to deploy. (Default: 1)
 avdSessionHostCountIndex | No       | The session host number to begin with for the deployment. This is important when adding virtual machines to host pool ensure the names do not conflict. (Default: 1)
 availability   | No       | AvailabilityZones distributes VMs across the selected availability zones; None deploys VMs regionally. (Default: AvailabilityZones)
-availabilityZones | No       | Array of session-host logical zone identifiers as strings. In Edit parameters, enter ["1"] or ["1", "2"], never a scalar. (Default: zones 1 and 2)
+availabilityZones | No       | Array of session-host logical zone identifiers. Select plain zone IDs in Portal controls; JSON parameter files use ["1"] or ["1", "2"], never a scalar or an ARM expression. (Default: zones 1 and 2)
 zoneRedundantStorage | No       | When true, Zone Redundant Storage (ZRS) is used, when set to false, Locally Redundant Storage (LRS) is used. (Default: false)
 fslogixStoragePerformance | No       | Storage account SKU for FSLogix storage. Recommended tier is Premium (Default: Premium)
 appAttachStoragePerformance | No       | Storage account SKU for App Attach storage. Recommended tier is Premium. (Default: Premium)
@@ -595,7 +595,7 @@ AvailabilityZones distributes VMs across the selected availability zones; None d
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Array of session-host logical zone identifiers as strings. In Edit parameters, enter ["1"] or ["1", "2"], never a scalar. (Default: zones 1 and 2)
+Array of session-host logical zone identifiers. Select plain zone IDs in Portal controls; JSON parameter files use ["1"] or ["1", "2"], never a scalar or an ARM expression. (Default: zones 1 and 2)
 
 - Default value: `1 2`
 

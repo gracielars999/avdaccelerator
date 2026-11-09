@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "7964386730454551789"
+      "templateHash": "17574399856956389175"
     },
     "name": "AVD Accelerator - Multiva Baseline Deployment",
     "description": "Multiva baseline with Mexico Central session hosts and East US 2 AVD service objects",
@@ -478,7 +478,7 @@
         "2"
       ],
       "metadata": {
-        "description": "Array of session-host logical zone identifiers as strings. In Edit parameters, enter [\"1\"] or [\"1\", \"2\"], never a scalar. (Default: zones 1 and 2)"
+        "description": "Array of session-host logical zone identifiers. Select plain zone IDs in Portal controls; JSON parameter files use [\"1\"] or [\"1\", \"2\"], never a scalar or an ARM expression. (Default: zones 1 and 2)"
       }
     },
     "zoneRedundantStorage": {
@@ -1020,6 +1020,13 @@
     }
   },
   "variables": {
+    "copy": [
+      {
+        "name": "varAvailabilityZones",
+        "count": "[length(parameters('availabilityZones'))]",
+        "input": "[if(startsWith(string(parameters('availabilityZones')[copyIndex('varAvailabilityZones')]), '\"'), json(string(parameters('availabilityZones')[copyIndex('varAvailabilityZones')])), string(parameters('availabilityZones')[copyIndex('varAvailabilityZones')]))]"
+      }
+    ],
     "$fxv#0": {
       "australiacentral": {
         "acronym": "auc",
@@ -32807,7 +32814,7 @@
             "value": "[parameters('availability')]"
           },
           "availabilityZones": {
-            "value": "[parameters('availabilityZones')]"
+            "value": "[variables('varAvailabilityZones')]"
           },
           "batchId": {
             "value": "[sub(range(1, variables('varSessionHostBatchCount'))[copyIndex()], 1)]"

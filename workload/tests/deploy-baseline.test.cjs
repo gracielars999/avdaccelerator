@@ -142,6 +142,7 @@ const functions = {
 
 const uiEvaluate = (expression, state) => evaluate(expression, {
   ...functions,
+  string: value => JSON.stringify(value === undefined ? null : value),
   steps: name => state[name]
 });
 
@@ -220,6 +221,7 @@ function state() {
 const output = (name, value) => uiEvaluate(form.view.outputs.parameters[name], value);
 const templates = [...objects(template)].filter(value => value.$schema && value.resources && value.parameters);
 const hostsTemplate = templates.find(value => value.variables?.copy?.some(item => item.name === 'varZones'));
+const hostsDeployment = template.resources.find(value => value.properties?.template === hostsTemplate);
 const policyTemplate = templates.find(value => value.variables?.varCustomPolicySetDefinitions);
 
 function armContext(arm, parameters) {
@@ -294,6 +296,13 @@ test('Multiva form defaults produce the matching compiled template values', () =
   }), 'Enabled');
 });
 
+test('Portal string conversion JSON-encodes existing strings unlike ARM string conversion', () => {
+  assert.equal(uiEvaluate("[string('1')]", {}), '"1"');
+  assert.equal(evaluate("[string('1')]", functions), '1');
+  assert.equal(uiEvaluate('[string(1)]', {}), '1');
+  assert.equal(uiEvaluate("[string(parse('[\"1\",\"2\"]'))]", {}), '["1","2"]');
+});
+
 for (const [selection, expected] of [
   [1, ['1']], ['1', ['1']], [['1'], ['1']], [[1], ['1']],
   [2, ['2']], ['2', ['2']], [['2'], ['2']], [[2], ['2']],
@@ -342,6 +351,56 @@ test('Edit parameters retains an array input while nested ARM validation still c
   assert.deepEqual(hostsTemplate.parameters.availabilityZones.defaultValue, []);
   assert.ok(parameter.defaultValue.every(zone =>
     hostsTemplate.parameters.availabilityZones.allowedValues.includes(zone)));
+});
+
+test('baseline normalizes edited zone-array elements before nested allowed-ID validation', () => {
+  assert.ok(hostsDeployment, 'The baseline must pass canonical zone IDs into the session-host deployment.');
+  for (const [selection, expected] of [
+    [[], []],
+    [['1'], ['1']],
+    [[2], ['2']],
+    [['1', '2'], ['1', '2']],
+    [[1, 2, 3], ['1', '2', '3']],
+    [['"1"'], ['1']],
+    [['"2"'], ['2']],
+    [['"1"', '"2"'], ['1', '2']],
+    [['"1"', '2', 3], ['1', '2', '3']]
+  ]) {
+    const context = armContext(template, { availabilityZones: selection });
+    const result = context.evaluate(hostsDeployment.properties.parameters.availabilityZones.value);
+    assert.deepEqual(result, expected, JSON.stringify(selection));
+    assert.ok(result.every(zone => hostsTemplate.parameters.availabilityZones.allowedValues.includes(zone)));
+  }
+});
+
+test('the reported quoted createArray operands reach VMs as logical zones 1 and 2', () => {
+  const selection = evaluate(`[createArray('"1"', '"2"')]`, functions);
+  assert.deepEqual(selection, ['"1"', '"2"']);
+  assert.ok(selection.every(zone => !hostsTemplate.parameters.availabilityZones.allowedValues.includes(zone)));
+  const context = armContext(template, { availabilityZones: selection });
+  const zones = context.evaluate(hostsDeployment.properties.parameters.availabilityZones.value);
+  assert.deepEqual(zones, ['1', '2']);
+  const hosts = armContext(hostsTemplate, { availabilityZones: zones, availability: 'AvailabilityZones', count: 4 });
+  const vm = hostsTemplate.resources.find(value => value.copy?.name === 'sessionHosts');
+  const assigned = Array.from({ length: 4 }, (_, index) => {
+    hosts.indices.set('', index);
+    return hosts.evaluate(vm.properties.parameters.zone).value;
+  });
+  assert.deepEqual(assigned, [1, 2, 1, 2]);
+});
+
+test('zone normalization retains validation for invalid IDs and does not evaluate parameter expression text', () => {
+  for (const selection of [
+    ['0'], [4], ['01'], ['1.5'], [1.5], ['"4"'], ['"1.5"'], ['1"'], ['1"2'], [JSON.stringify('"1"')],
+    ['["1","2"]'], ["[createArray('1','2')]"], [{ value: '1' }], [null]
+  ]) {
+    const context = armContext(template, { availabilityZones: selection });
+    const result = context.evaluate(hostsDeployment.properties.parameters.availabilityZones.value);
+    assert.ok(result.some(zone => !hostsTemplate.parameters.availabilityZones.allowedValues.includes(zone)),
+      JSON.stringify(selection));
+  }
+  const context = armContext(template, { availabilityZones: ['"1'] });
+  assert.throws(() => context.evaluate(hostsDeployment.properties.parameters.availabilityZones.value), SyntaxError);
 });
 
 test('missing or paged SKU data cannot remove Availability Zones or change the zonal default', () => {
