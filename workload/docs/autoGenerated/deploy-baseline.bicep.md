@@ -14,8 +14,8 @@ avdManagementPlaneLocation | No       | Location where to deploy AVD management 
 avdWorkloadSubsId | No       | Workload subscription GUID. Defaults to the subscription selected for this deployment. Override only for an intentional cross-subscription deployment; an explicit blank is not valid.
 avdServicePrincipalObjectId | No       | Azure Virtual Desktop Enterprise Application object ID (Enterprise app name: Azure Virtual Desktop) . (Default: "")
 avdArmServicePrincipalObjectId | No       | Azure Virtual Desktop ARM Enterprise Application Object Id (Enterprise app name: Azure Virtual Desktop ARM Provider). Required for the deployment of App Attach File Share with EntraID identity provider. (Default: "")
-avdVmLocalUserName | Yes      | AVD session host local username.
-avdVmLocalUserPassword | Yes      | AVD session host local password.
+avdVmLocalUserName | Yes      | Required, non-empty local Windows administrator username for the session hosts, including Microsoft Entra ID-joined VMs. Supplied by the local admin field; no account is preconfigured.
+avdVmLocalUserPassword | Yes      | Required, non-empty AVD session host local administrator password.
 avdIdentityServiceProvider | No       | Required, The service providing domain services for Azure Virtual Desktop. (Default: ADDS)
 createIntuneEnrollment | No       | Required, Enroll session hosts on Intune. (Default: false)
 avdSecurityGroups | No       | Optional. Identity ID(s) to grant RBAC role to access AVD application group and NTFS permissions. (Default: [])
@@ -201,13 +201,13 @@ Azure Virtual Desktop ARM Enterprise Application Object Id (Enterprise app name:
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-required-orange?style=flat-square)
 
-AVD session host local username.
+Required, non-empty local Windows administrator username for the session hosts, including Microsoft Entra ID-joined VMs. Supplied by the local admin field; no account is preconfigured.
 
 ### avdVmLocalUserPassword
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-required-orange?style=flat-square)
 
-AVD session host local password.
+Required, non-empty AVD session host local administrator password.
 
 ### avdIdentityServiceProvider
 

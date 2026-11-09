@@ -16,6 +16,20 @@ The baseline now defaults `avdWorkloadSubsId` to `subscription().subscriptionId`
 
 With the corrected template, remove an old `"avdWorkloadSubsId": { "value": "" }` entry from a JSON parameter file to inherit the deployment selection, or replace it with the intended GUID for an explicit override. Do not supply `/subscriptions/<guid>` as this parameter. An explicit empty string is not equivalent to omitting the parameter and does not activate its default; see the [subscriptionResourceId reference](https://learn.microsoft.com/azure/azure-resource-manager/templates/template-functions-resource#subscriptionresourceid). Reopen the corrected deployment link rather than reusing an old saved blank payload. Offline validation does not establish a successful customer deployment.
 
+## InvalidParameter: osProfile.adminUsername is missing
+
+This error means the VM received no usable local administrator username. It does not by itself identify why the input was lost or prove an RBAC or Entra join problem. In **Identity provider > Session host local admin credentials**, provide the required **Local administrator username** and password, even when Microsoft Entra ID is the identity provider. Supply a local account name, not an Entra UPN. For an existing VM, use its original administrator username; this is not an in-place account rename.
+
+The form uses the native Windows username control and exports the existing field as `avdVmLocalUserName`. The baseline writes that value as the workload Key Vault's `vmLocalUserName` secret; the session-host module references that secret for the VM module's `adminUsername`, which feeds `osProfile.adminUsername`. The baseline credential parameters and VM administrator parameter reject empty strings before a VM request. No fallback account or default password is added.
+
+When redeploying, check the template version and deployment level. Secure inputs are not returned as plaintext in deployment history; re-enter required credentials or retain the intended Key Vault references rather than accepting blank secure fields. The Bicep parameter samples require `AVD_VM_LOCAL_USERNAME` and `AVD_VM_LOCAL_PASSWORD` from the current process environment with no fallback; their compiled JSON can contain the supplied password and must remain private. Never post passwords, secret values or unredacted parameter files to diagnose this error. Offline wiring checks do not confirm which input the failed customer deployment submitted.
+
+## Redeploy: Data Disks says the value must not be empty
+
+`Data Disks` is an optional array in the internal VM module, not a top-level baseline parameter. Its nullable type has an implicit `null` default, which can leave the generic Portal redeployment editor blank when the caller omits it. The baseline now explicitly supplies `[]` in both session-host and temporary management-VM calls, so their deployment parameters contain an array. The generic module remains compatible with other callers: empty arrays and explicit legacy `null` inputs both still produce no data disks, and non-empty disk arrays keep their existing behavior.
+
+For a VM with no data disks, enter the JSON array `[]` rather than an empty text box; do not add a disk just to satisfy the editor. If a VM already has intentional data disks, retain those definitions instead of replacing them with `[]`. Opening an old deployment's **Redeploy** screen does not download the newly published template: use the updated accelerator entrypoint for a full deployment, or deliberately load the corrected VM template for a nested redeployment. The custom baseline form and a nested VM parameter editor expose different inputs.
+
 ## Availability zone array becomes a scalar in Edit parameters
 
 The standard ARM **Edit parameters** screen is not the accelerator's custom multi-select form. An array parameter with a top-level `allowedValues` list can appear there as a single-choice dropdown, with the warning that its array default is not present in the allowed list. Choosing `2` in that dropdown can submit a scalar even though the template requires an array.

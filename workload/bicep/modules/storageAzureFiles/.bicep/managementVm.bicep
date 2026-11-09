@@ -130,6 +130,7 @@ module managementVm '../../../../../avm/1.0.0/res/compute/virtual-machine/main.b
             caching: 'ReadWrite'
             managedDisk: varManagedDisk
         }
+        dataDisks: []
         adminUsername: vmLocalUserName
         adminPassword: avdWrklKeyVaultget.getSecret('vmLocalUserPassword')
         nicConfigurations: [

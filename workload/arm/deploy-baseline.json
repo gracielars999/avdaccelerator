@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "2296387320038812629"
+      "templateHash": "16688764961533391281"
     },
     "name": "AVD Accelerator - Multiva Baseline Deployment",
     "description": "Multiva baseline with Mexico Central session hosts and East US 2 AVD service objects",
@@ -82,14 +82,16 @@
     },
     "avdVmLocalUserName": {
       "type": "string",
+      "minLength": 1,
       "metadata": {
-        "description": "AVD session host local username."
+        "description": "Required, non-empty local Windows administrator username for the session hosts, including Microsoft Entra ID-joined VMs. Supplied by the local admin field; no account is preconfigured."
       }
     },
     "avdVmLocalUserPassword": {
       "type": "securestring",
+      "minLength": 1,
       "metadata": {
-        "description": "AVD session host local password."
+        "description": "Required, non-empty AVD session host local administrator password."
       }
     },
     "avdIdentityServiceProvider": {
@@ -22990,7 +22992,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "14295216077040370259"
+              "templateHash": "2337580787383096983"
             }
           },
           "parameters": {
@@ -23211,6 +23213,9 @@
                       "managedDisk": "[variables('varManagedDisk')]"
                     }
                   },
+                  "dataDisks": {
+                    "value": []
+                  },
                   "adminUsername": {
                     "value": "[parameters('vmLocalUserName')]"
                   },
@@ -23272,7 +23277,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.39.26.7824",
-                      "templateHash": "17317518331951209256"
+                      "templateHash": "10020448182914496858"
                     },
                     "name": "Virtual Machines",
                     "description": "This module deploys a Virtual Machine with one or multiple NICs and optionally one or multiple public IPs.",
@@ -23545,7 +23550,7 @@
                     "dataDisks": {
                       "$ref": "#/definitions/dataDisksType",
                       "metadata": {
-                        "description": "Optional. Specifies the data disks. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs."
+                        "description": "Optional. Specifies the data disks. Use [] when no data disks are required. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs."
                       }
                     },
                     "ultraSSDEnabled": {
@@ -23557,8 +23562,9 @@
                     },
                     "adminUsername": {
                       "type": "securestring",
+                      "minLength": 1,
                       "metadata": {
-                        "description": "Required. Administrator username."
+                        "description": "Required. Non-empty administrator username, supplied by the caller."
                       }
                     },
                     "adminPassword": {
@@ -32926,7 +32932,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "17618622279726178938"
+              "templateHash": "14764553694341394171"
             }
           },
           "parameters": {
@@ -33272,6 +33278,9 @@
                   },
                   "imageReference": "[if(parameters('useSharedImage'), createObject('value', createObject('id', parameters('customImageDefinitionId'))), createObject('value', createObject('publisher', parameters('mpImagePublisher'), 'offer', parameters('mpImageOffer'), 'sku', parameters('mpImageSku'), 'version', 'latest')))]",
                   "osDisk": "[if(not(equals(parameters('customOsDiskSizeGB'), 0)), createObject('value', variables('varCustomOsDiskProperties')), createObject('value', variables('varOsDiskProperties')))]",
+                  "dataDisks": {
+                    "value": []
+                  },
                   "adminUsername": {
                     "reference": {
                       "keyVault": {
@@ -33313,7 +33322,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.39.26.7824",
-                      "templateHash": "17317518331951209256"
+                      "templateHash": "10020448182914496858"
                     },
                     "name": "Virtual Machines",
                     "description": "This module deploys a Virtual Machine with one or multiple NICs and optionally one or multiple public IPs.",
@@ -33586,7 +33595,7 @@
                     "dataDisks": {
                       "$ref": "#/definitions/dataDisksType",
                       "metadata": {
-                        "description": "Optional. Specifies the data disks. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs."
+                        "description": "Optional. Specifies the data disks. Use [] when no data disks are required. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs."
                       }
                     },
                     "ultraSSDEnabled": {
@@ -33598,8 +33607,9 @@
                     },
                     "adminUsername": {
                       "type": "securestring",
+                      "minLength": 1,
                       "metadata": {
-                        "description": "Required. Administrator username."
+                        "description": "Required. Non-empty administrator username, supplied by the caller."
                       }
                     },
                     "adminPassword": {

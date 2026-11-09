@@ -8,8 +8,9 @@ param avdManagementPlaneLocation = 'eastus2'
 // Inherit the deployment subscription; set a GUID only for an intentional cross-subscription override.
 param avdServicePrincipalObjectId = ''
 param avdArmServicePrincipalObjectId = ''
-param avdVmLocalUserName = ''
-param avdVmLocalUserPassword = ''
+// Supply credentials through the process environment; never commit their values.
+param avdVmLocalUserName = readEnvironmentVariable('AVD_VM_LOCAL_USERNAME')
+param avdVmLocalUserPassword = readEnvironmentVariable('AVD_VM_LOCAL_PASSWORD')
 param avdIdentityServiceProvider = 'ADDS'
 param createIntuneEnrollment = false
 param avdSecurityGroups = []

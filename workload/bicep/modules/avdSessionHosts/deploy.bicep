@@ -218,6 +218,7 @@ module sessionHosts '../../../../avm/1.0.0/res/compute/virtual-machine/main.bice
             version: 'latest'
           }
       osDisk: customOsDiskSizeGB != 0 ? varCustomOsDiskProperties : varOsDiskProperties
+      dataDisks: []
       adminUsername: keyVault.getSecret('vmLocalUserName')
       adminPassword: keyVault.getSecret('vmLocalUserPassword')
       nicConfigurations: [

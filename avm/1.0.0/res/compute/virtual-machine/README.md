@@ -3081,7 +3081,7 @@ module virtualMachine 'br/public:avm/res/compute/virtual-machine:<version>' = {
 
 | Parameter | Type | Description |
 | :-- | :-- | :-- |
-| [`adminUsername`](#parameter-adminusername) | securestring | Administrator username. |
+| [`adminUsername`](#parameter-adminusername) | securestring | Non-empty administrator username, supplied by the caller. |
 | [`imageReference`](#parameter-imagereference) | object | OS image reference. In case of marketplace images, it's the combination of the publisher, offer, sku, version attributes. In case of custom images it's the resource ID of the custom image. |
 | [`name`](#parameter-name) | string | The name of the virtual machine to be created. You should use a unique prefix to reduce name collisions in Active Directory. |
 | [`nicConfigurations`](#parameter-nicconfigurations) | array | Configures NICs and PIPs. |
@@ -3110,7 +3110,7 @@ module virtualMachine 'br/public:avm/res/compute/virtual-machine:<version>' = {
 | [`computerName`](#parameter-computername) | string | Can be used if the computer name needs to be different from the Azure VM resource name. If not used, the resource name will be used as computer name. |
 | [`configurationProfile`](#parameter-configurationprofile) | string | The configuration profile of automanage. Either '/providers/Microsoft.Automanage/bestPractices/AzureBestPracticesProduction', 'providers/Microsoft.Automanage/bestPractices/AzureBestPracticesDevTest' or the resource Id of custom profile. |
 | [`customData`](#parameter-customdata) | string | Custom data associated to the VM, this value will be automatically converted into base64 to account for the expected VM format. |
-| [`dataDisks`](#parameter-datadisks) | array | Specifies the data disks. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs. |
+| [`dataDisks`](#parameter-datadisks) | array | Specifies the data disks. The AVD baseline explicitly passes `[]` for no data disks. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs. |
 | [`dedicatedHostId`](#parameter-dedicatedhostid) | string | Specifies resource ID about the dedicated host that the virtual machine resides in. |
 | [`disablePasswordAuthentication`](#parameter-disablepasswordauthentication) | bool | Specifies whether password authentication should be disabled. |
 | [`enableAutomaticUpdates`](#parameter-enableautomaticupdates) | bool | Indicates whether Automatic Updates is enabled for the Windows virtual machine. Default value is true. When patchMode is set to Manual, this parameter must be set to false. For virtual machine scale sets, this property can be updated and updates will take effect on OS reprovisioning. |
@@ -3165,10 +3165,11 @@ module virtualMachine 'br/public:avm/res/compute/virtual-machine:<version>' = {
 
 ### Parameter: `adminUsername`
 
-Administrator username.
+Non-empty administrator username, supplied by the caller. No administrator account is preconfigured.
 
 - Required: Yes
 - Type: securestring
+- Minimum length: 1
 
 ### Parameter: `imageReference`
 
@@ -3484,10 +3485,12 @@ Custom data associated to the VM, this value will be automatically converted int
 
 ### Parameter: `dataDisks`
 
-Specifies the data disks. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs.
+Specifies the data disks. Use `[]` when no data disks are required instead of leaving the Portal array editor blank. For security reasons, it is recommended to specify DiskEncryptionSet into the dataDisk object. Restrictions: DiskEncryptionSet cannot be enabled if Azure Disk Encryption (guest-VM encryption using bitlocker/DM-Crypt) is enabled on your VMs.
 
 - Required: No
 - Type: array
+
+The AVD baseline explicitly passes `[]` so nested redeployment parameters retain an array value. The module's nullable input remains compatible with other callers that omit it or explicitly pass `null`.
 
 **Required parameters**
 

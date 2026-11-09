@@ -47,10 +47,12 @@ param avdServicePrincipalObjectId string = ''
 @sys.description('Azure Virtual Desktop ARM Enterprise Application Object Id (Enterprise app name: Azure Virtual Desktop ARM Provider). Required for the deployment of App Attach File Share with EntraID identity provider. (Default: "")')
 param avdArmServicePrincipalObjectId string = ''
 
-@sys.description('AVD session host local username.')
+@minLength(1)
+@sys.description('Required, non-empty local Windows administrator username for the session hosts, including Microsoft Entra ID-joined VMs. Supplied by the local admin field; no account is preconfigured.')
 param avdVmLocalUserName string
 
-@sys.description('AVD session host local password.')
+@minLength(1)
+@sys.description('Required, non-empty AVD session host local administrator password.')
 @secure()
 param avdVmLocalUserPassword string
 

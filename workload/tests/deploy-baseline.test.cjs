@@ -132,6 +132,7 @@ const functions = {
   div: (left, right) => Math.trunc(left / right),
   mod: (left, right) => left % right,
   createArray: (...values) => values,
+  coalesce: (...values) => values.find(value => value !== null && value !== undefined),
   createObject: (...values) => Object.fromEntries(
     Array.from({ length: values.length / 2 }, (_, index) => [values[index * 2], values[index * 2 + 1]])
   ),
@@ -221,6 +222,7 @@ function state() {
 
 const output = (name, value) => uiEvaluate(form.view.outputs.parameters[name], value);
 const templates = [...objects(template)].filter(value => value.$schema && value.resources && value.parameters);
+const vmTemplates = templates.filter(value => value.parameters.adminUsername && value.parameters.dataDisks);
 const hostsTemplate = templates.find(value => value.variables?.copy?.some(item => item.name === 'varZones'));
 const hostsDeployment = template.resources.find(value => value.properties?.template === hostsTemplate);
 const policyTemplate = templates.find(value => value.variables?.varCustomPolicySetDefinitions);
@@ -280,7 +282,7 @@ function armContext(arm, parameters, deploymentSubscriptionId) {
       return cache.get(name);
     }
   };
-  return { evaluate: value => evaluate(value, context), variables: context.variables, indices };
+  return { evaluate: resolveValue, variables: context.variables, indices };
 }
 
 test('Multiva form defaults produce the matching compiled template values', () => {
@@ -705,9 +707,99 @@ test('disabled storage and missing zone mappings do not read an undefined locati
     [{ label: 'Locally Redundant Storage', value: false }, { label: 'Zone-Redundant Storage', value: true }]);
 });
 
+test('the required Windows admin field reaches Key Vault and the VM OS profile for every identity provider', () => {
+  const field = control('identityLocalUserName');
+  assert.equal(field.type, 'Microsoft.Compute.UserNameTextBox');
+  assert.equal(field.osPlatform, 'Windows');
+  assert.equal(field.constraints.required, true);
+  assert.equal(field.defaultValue, '');
+  assert.equal(control('identityLocalCredentials').visible, true);
+  const vault = template.resources.find(resource => resource.name?.includes('Workload-KeyVault-'));
+  assert.ok(vault?.properties.parameters.secrets, 'Check the generated local credential secret inputs.');
+  assert.ok(vmTemplates.length > 0);
+  for (const provider of ['ADDS', 'EntraDS', 'EntraID', 'EntraIDKerberos']) {
+    const value = state();
+    value.identity = {
+      identityLocalCredentials: {
+        identityLocalUserName: 'testlocaladmin',
+        identityLocalUserPassword: { authenticationType: 'password', password: 'test-fixture-only-A1!' }
+      }
+    };
+    const inputs = {
+      avdIdentityServiceProvider: provider,
+      avdVmLocalUserName: output('avdVmLocalUserName', value),
+      avdVmLocalUserPassword: output('avdVmLocalUserPassword', value)
+    };
+    assert.equal(inputs.avdVmLocalUserName, value.identity.identityLocalCredentials.identityLocalUserName);
+    const secrets = armContext(template, inputs).evaluate(vault.properties.parameters.secrets).value;
+    const username = secrets.find(secret => secret.name === 'vmLocalUserName').value;
+    const password = secrets.find(secret => secret.name === 'vmLocalUserPassword').value;
+    assert.equal(username, inputs.avdVmLocalUserName, provider);
+    assert.equal(password, inputs.avdVmLocalUserPassword, provider);
+    for (const vm of vmTemplates) {
+      const resource = Object.values(vm.resources).find(item => item.type === 'Microsoft.Compute/virtualMachines');
+      const context = armContext(vm, { adminUsername: username });
+      assert.equal(context.evaluate(resource.properties.osProfile.adminUsername), username, provider);
+    }
+  }
+  const calls = Object.values(hostsTemplate.resources).filter(resource =>
+    resource.properties?.parameters?.adminUsername);
+  assert.ok(calls.length > 0);
+  for (const call of calls) {
+    assert.equal(call.properties.parameters.adminUsername.reference.secretName, 'vmLocalUserName');
+    assert.equal(call.properties.parameters.adminPassword.reference.secretName, 'vmLocalUserPassword');
+  }
+});
+
+test('every generated VM requires a non-empty administrator without a default account', () => {
+  assert.ok(vmTemplates.length > 0);
+  for (const vm of vmTemplates) {
+    const parameter = vm.parameters.adminUsername;
+    assert.equal(parameter.type.toLowerCase(), 'securestring');
+    assert.equal(parameter.minLength, 1);
+    assert.equal(Object.hasOwn(parameter, 'defaultValue'), false);
+    assert.notEqual(parameter.nullable, true);
+  }
+});
+
+test('baseline VM calls retain empty disk arrays for redeploy without changing explicit disk inputs', () => {
+  assert.equal(Object.hasOwn(template.parameters, 'dataDisks'), false,
+    'Data Disks belongs to the nested VM template, not the baseline form.');
+  assert.ok(vmTemplates.length > 0);
+  const calls = templates.flatMap(value => Object.values(value.resources))
+    .filter(resource => vmTemplates.includes(resource.properties?.template));
+  assert.ok(calls.length > 0);
+  for (const call of calls) {
+    assert.deepEqual(call.properties.parameters.dataDisks.value, []);
+    const vm = call.properties.template;
+    assert.equal(vm.definitions.dataDisksType.type, 'array');
+    assert.equal(vm.definitions.dataDisksType.nullable, true, 'Keep explicit null callers compatible.');
+    const resource = Object.values(vm.resources).find(item => item.type === 'Microsoft.Compute/virtualMachines');
+    const disks = resource.properties.storageProfile.copy.find(item => item.name === 'dataDisks');
+    for (const [parameters, count] of [
+      [{ dataDisks: call.properties.parameters.dataDisks.value }, 0],
+      [{ dataDisks: [] }, 0],
+      [{ dataDisks: null }, 0],
+      [{ dataDisks: [{ diskSizeGB: 32, managedDisk: { storageAccountType: 'Premium_LRS' } }] }, 1]
+    ]) {
+      assert.equal(armContext(vm, parameters).evaluate(disks.count), count);
+    }
+  }
+});
+
+test('Bicep parameter samples require explicit credentials instead of blank or preset values', () => {
+  for (const name of ['deploy-baseline-all.bicepparam', 'deploy-baseline-required-only.bicepparam']) {
+    const sample = read('workload', 'bicep', 'parameters', name);
+    assert.ok(sample.includes("param avdVmLocalUserName = readEnvironmentVariable('AVD_VM_LOCAL_USERNAME')"), name);
+    assert.ok(sample.includes("param avdVmLocalUserPassword = readEnvironmentVariable('AVD_VM_LOCAL_PASSWORD')"), name);
+  }
+});
+
 test('credentials and tenant-specific enterprise application IDs remain customer inputs', () => {
   for (const name of ['avdVmLocalUserName', 'avdVmLocalUserPassword']) {
     assert.equal(Object.hasOwn(template.parameters[name], 'defaultValue'), false, name);
+    assert.equal(template.parameters[name].minLength, 1, name);
+    assert.notEqual(template.parameters[name].nullable, true, name);
   }
   assert.equal(template.parameters.avdVmLocalUserPassword.type.toLowerCase(), 'securestring');
   assert.equal(template.parameters.avdServicePrincipalObjectId.defaultValue, '');
