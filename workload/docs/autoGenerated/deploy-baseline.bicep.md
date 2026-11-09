@@ -65,7 +65,7 @@ alaExistingWorkspaceResourceId | No       | Existing Azure log analytics workspa
 avdDeploySessionHostsCount | No       | Quantity of session hosts to deploy. (Default: 1)
 avdSessionHostCountIndex | No       | The session host number to begin with for the deployment. This is important when adding virtual machines to host pool ensure the names do not conflict. (Default: 1)
 availability   | No       | AvailabilityZones distributes VMs across the selected availability zones; None deploys VMs regionally. (Default: AvailabilityZones)
-availabilityZones | No       | Array of availability zone identifiers for the session hosts, including when selecting just one zone. (Default: zones 1 and 2)
+availabilityZones | No       | Array of session-host logical zone identifiers as strings. In Edit parameters, enter ["1"] or ["1", "2"], never a scalar. (Default: zones 1 and 2)
 zoneRedundantStorage | No       | When true, Zone Redundant Storage (ZRS) is used, when set to false, Locally Redundant Storage (LRS) is used. (Default: false)
 fslogixStoragePerformance | No       | Storage account SKU for FSLogix storage. Recommended tier is Premium (Default: Premium)
 appAttachStoragePerformance | No       | Storage account SKU for App Attach storage. Recommended tier is Premium. (Default: Premium)
@@ -79,7 +79,7 @@ secureBootEnabled | No       | Specifies whether secure boot should be enabled o
 vTpmEnabled    | No       | Specifies whether vTPM should be enabled on the virtual machine. This parameter is part of the UefiSettings. securityType should be set to TrustedLaunch or ConfidentialVM to enable UefiSettings. (Default: true)
 useSharedImage | No       | Set to deploy image from Azure Compute Gallery. (Default: false)
 mpImageOffer   | No       | AVD OS image offer. (Default: windows-11)
-mpImageSku     | No       | AVD OS image SKU. (Default: win11-24h2-ent, Windows 11 Enterprise 24H2 single-session)
+mpImageSku     | No       | AVD OS image SKU. (Default: win11-24h2-avd, Windows 11 Enterprise 24H2 multi-session)
 avdCustomImageDefinitionId | No       | Source custom image ID. (Default: "")
 managementVmOsImage | No       | Management VM image SKU (Default: winServer_2022_Datacenter_smalldisk_g2)
 storageOuPath  | No       | OU name for Azure Storage Account. It is recommended to create a new AD Organizational Unit (OU) in AD and disable password expiration policy on computer accounts or service logon accounts accordingly.  (Default: "")
@@ -595,11 +595,9 @@ AvailabilityZones distributes VMs across the selected availability zones; None d
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-Array of availability zone identifiers for the session hosts, including when selecting just one zone. (Default: zones 1 and 2)
+Array of session-host logical zone identifiers as strings. In Edit parameters, enter ["1"] or ["1", "2"], never a scalar. (Default: zones 1 and 2)
 
 - Default value: `1 2`
-
-- Allowed values: `1`, `2`, `3`
 
 ### zoneRedundantStorage
 
@@ -718,9 +716,9 @@ AVD OS image offer. (Default: windows-11)
 
 ![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD OS image SKU. (Default: win11-24h2-ent, Windows 11 Enterprise 24H2 single-session)
+AVD OS image SKU. (Default: win11-24h2-avd, Windows 11 Enterprise 24H2 multi-session)
 
-- Default value: `win11-24h2-ent`
+- Default value: `win11-24h2-avd`
 
 ### avdCustomImageDefinitionId
 
@@ -1399,7 +1397,7 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
             "value": "windows-11"
         },
         "mpImageSku": {
-            "value": "win11-24h2-ent"
+            "value": "win11-24h2-avd"
         },
         "avdCustomImageDefinitionId": {
             "value": ""

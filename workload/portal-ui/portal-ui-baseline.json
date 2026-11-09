@@ -698,15 +698,6 @@
 										"required": true,
 										"allowedValues": "[map(if(empty(steps('sessionHosts').sessionHostsRegionSection.computeApi.value), parse('[]'), if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.computeApi.value, (resourceType) => equals(resourceType.resourceType, 'virtualMachines'))), parse('[]'), if(empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.computeApi.value, (resourceType) => equals(resourceType.resourceType, 'virtualMachines'))).locations), parse('[]'), first(filter(steps('sessionHosts').sessionHostsRegionSection.computeApi.value, (resourceType) => equals(resourceType.resourceType, 'virtualMachines'))).locations))), (region) => parse(concat('{\"label\":\"', region, '\",\"value\":\"', toLower(replace(region, ' ', '')), '\"}')))]"
 									}
-								},
-								{
-									"name": "locationZonesApi",
-									"type": "Microsoft.Solutions.ArmApiControl",
-									"condition": "[and(not(empty(steps('basics').resourceScope.subscription.subscriptionId)), if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), false, not(equals(toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), 'mexicocentral'))))]",
-									"request": {
-										"method": "GET",
-										"path": "[concat('/subscriptions/', steps('basics').resourceScope.subscription.subscriptionId, '/locations?api-version=2022-12-01')]"
-									}
 								}
 							]
 						},
@@ -790,10 +781,10 @@
 									"name": "sku",
 									"type": "Microsoft.Common.DropDown",
 									"label": "SKU",
-									"defaultValue": "win11-24h2-ent",
-									"toolTip": "Select the desired marketplace image SKU.",
+									"defaultValue": "win11-24h2-avd",
+									"toolTip": "Only AVD image SKUs are shown, matching the original accelerator. Multiva defaults to Windows 11 Enterprise 24H2 multi-session. Personal remains the host pool assignment type.",
 									"constraints": {
-										"allowedValues": "[map(filter(steps('sessionHosts').sessionHostsOsSection.skusApi, (sku) => and(startsWith(sku.name, 'win'), or(contains(sku.name, 'ent'), contains(sku.name, 'avd')))), (sku) => parse(concat('{\"label\":\"', sku.name, '\",\"value\":\"', sku.name, '\"}')))]",
+										"allowedValues": "[map(filter(steps('sessionHosts').sessionHostsOsSection.skusApi, (sku) => and(startsWith(sku.name, 'win'), not(contains(sku.name, 'ent')), or(contains(sku.name, 'ent'), contains(sku.name, 'avd')))), (sku) => parse(concat('{\"label\":\"', sku.name, '\",\"value\":\"', sku.name, '\"}')))]",
 										"required": true
 									},
 									"visible": "[equals(steps('sessionHosts').sessionHostsOsSection.source, 'marketplace')]"
@@ -1031,7 +1022,7 @@
 									"type": "Microsoft.Common.DropDown",
 									"defaultValue": "Availability Zones",
 									"label": "Availability Option",
-									"toolTip": "Select zonal or regional deployment. Mexico Central uses its documented regional zone identifiers; other regions use subscription zone mappings. Verify that the selected VM size supports the selected zones before deployment.",
+									"toolTip": "Select zonal or regional deployment. Zone identifiers are configured manually, not discovered by this form. Verify that the selected region and VM size support the selected zones before deployment.",
 									"constraints": {
 										"required": true,
 										"allowedValues": [
@@ -1060,22 +1051,25 @@
 									],
 									"multiselect": true,
 									"selectAll": true,
-									"toolTip": "Mexico Central offers the region's documented zone identifiers 1, 2 and 3 without depending on API zone mappings; Multiva selects 1 and 2. Other regions use returned logical zone mappings. These choices do not confirm VM size eligibility, subscription restrictions, quota or capacity.",
+									"toolTip": "Select from the template's logical zone identifiers 1, 2 and 3. Multiva defaults to 1 and 2. This literal list has no region or API dependency and does not confirm VM size eligibility, subscription restrictions, quota or capacity.",
 									"constraints": {
-										"allowedValues": "[if(if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), false, equals(toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), 'mexicocentral')), parse('[{\"label\":\"Zone 1\",\"value\":\"1\"},{\"label\":\"Zone 2\",\"value\":\"2\"},{\"label\":\"Zone 3\",\"value\":\"3\"}]'), map(if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), parse('[]'), if(empty(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value), parse('[]'), if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))), parse('[]'), if(empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings), parse('[]'), first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings)))), (zone) => parse(concat('{\"label\":\"Zone ', string(zone.logicalZone), '\",\"value\":\"', string(zone.logicalZone), '\"}'))))]",
+										"allowedValues": [
+											{
+												"label": "Zone 1",
+												"value": "1"
+											},
+											{
+												"label": "Zone 2",
+												"value": "2"
+											},
+											{
+												"label": "Zone 3",
+												"value": "3"
+											}
+										],
 										"required": true
 									},
 									"visible": "[equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones')]"
-								},
-								{
-									"name": "availabilityZonesLookupWarning",
-									"type": "Microsoft.Common.InfoBox",
-									"visible": "[and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones'), if(empty(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), true, if(equals(toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion), 'mexicocentral'), false, if(empty(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value), true, if(empty(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))), true, empty(first(filter(steps('sessionHosts').sessionHostsRegionSection.locationZonesApi.value, (region) => equals(toLower(region.name), toLower(steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion)))).availabilityZoneMappings))))))]",
-									"options": {
-										"style": "Warning",
-										"text": "No logical zone mappings have been returned for the selected subscription and region. The lookup may still be loading, may have failed, or the region may not offer zones. Zonal deployment requires a nonempty zone selection; the form does not silently change to regional deployment. Check the subscription, region and lookup permissions, or explicitly choose regional deployment.",
-										"uri": "https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations"
-									}
 								},
 								{
 									"name": "availabilityZonesSkuWarning",
@@ -1083,7 +1077,7 @@
 									"visible": "[and(steps('sessionHosts').deploySessionHosts, equals(steps('sessionHosts').sessionHostsAvailabilitySection.option, 'AvailabilityZones'))]",
 									"options": {
 										"style": "Warning",
-										"text": "For Mexico Central, the template offers the region's documented zone identifiers 1, 2 and 3; it does not rely on the subscription API returning zone mappings. This is not a VM-size eligibility check. Verify the VM size's locationInfo.zones and subscription restrictions for every selected zone before deployment. Mexico Central having three zones does not guarantee Standard_D4ads_v5 is available in all of them. Quota and capacity are separate checks.",
+										"text": "The zone list contains the template's allowed logical identifiers 1, 2 and 3, not discovered availability. Mexico Central has three regional zones, but this does not guarantee Standard_D4ads_v5 is available in all of them. Verify the selected region, the VM size's locationInfo.zones and subscription restrictions for every selected zone; quota and capacity are separate checks. If the chosen region does not offer zones, explicitly select No infrastructure redundancy required.",
 										"uri": "https://learn.microsoft.com/azure/virtual-machines/sizes/overview#list-available-vm-sizes"
 									}
 								},

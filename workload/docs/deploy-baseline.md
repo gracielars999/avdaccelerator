@@ -9,9 +9,9 @@ The commercial baseline in this fork is the Multiva-specific version of the upst
 | Deployment record and AVD service objects / management plane | One editable region on Basics; select East US 2 (`eastus2`) for Multiva |
 | Session hosts and workload network | Mexico Central (`mexicocentral`) |
 | Host pool | Personal, automatic assignment |
-| Image | Marketplace, `MicrosoftWindowsDesktop/windows-11/win11-24h2-ent`, latest image version |
+| Image | Marketplace, `MicrosoftWindowsDesktop/windows-11/win11-24h2-avd`, latest image version |
 | OS disk | Premium |
-| Availability | Availability Zones, with logical zones 1 and 2 selected; Mexico Central choices are 1, 2 and 3 |
+| Availability | Availability Zones, with logical zones 1 and 2 selected; literal template choices are 1, 2 and 3 |
 | FSLogix | Disabled |
 | Virtual network | New, `10.131.0.0/16` |
 | AVD subnet | `10.131.17.0/24` |
@@ -24,7 +24,13 @@ The existing VM size (`Standard_D4ads_v5`), VM count (**1**), and other unrelate
 
 East US 2 is **not** the VM location. Under AVD's default geographical deployment scope, these settings associate AVD metadata with the **US geography**, outside Mexico; they do not guarantee metadata storage exclusively in East US 2. Review [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) and customer residency requirements before deploying. [Mexico Central supports availability zones](https://learn.microsoft.com/azure/reliability/regions-list), but the selected subscription's SKU/image availability, quota and capacity must still be checked.
 
-The Availability Option remains selectable independently of VM size discovery. For Mexico Central, the form explicitly offers the region's documented logical zone identifiers **1, 2 and 3**, selecting **1 and 2** for Multiva. This list does not depend on the subscription API returning zone mappings. Other VM regions use the selected subscription's [regional logical zone mappings](https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations), not physical zone identifiers or an incomplete SKU-list response; a missing/pending response there shows a warning and leaves the required zone selection empty. The form does not silently switch to regional VMs. Before continuing with zonal deployment, verify the VM size in each selected zone and acknowledge the form's verification checkbox. Neither the Mexico zone list nor API mappings guarantee SKU availability, subscription eligibility or capacity.
+The Marketplace SKU filter now matches the original accelerator exactly: it includes Windows AVD images and excludes SKU names containing `ent`. The default is therefore **`win11-24h2-avd`**, Windows 11 Enterprise 24H2 **multi-session**, replacing the previous single-session `win11-24h2-ent` choice. The host pool remains **Personal**; assignment type and OS edition are separate settings. Windows-11, the release, FSLogix and monitoring preferences remain unchanged.
+
+Changing an image default does not reimage an existing session host or repair its Entra join. Do not retry an existing VM with a different Marketplace SKU as an in-place image change; plan new hosts separately before modifying customer resources.
+
+The Availability Option remains selectable independently of VM size discovery. The zone dropdown now contains a **literal** list of template-supported logical IDs **1, 2 and 3**, with **1 and 2** selected for Multiva. It has no region/API expression or zone lookup that can leave its item list empty. This is manual deployment intent, **not automatic availability discovery**: a visible warning and required checkbox still require verifying the selected region, VM size and subscription restrictions. When selecting another VM region, verify that it offers the chosen zones; explicitly choose regional deployment if it does not. The form does not silently change to regional VMs, and these identifiers do not guarantee image/SKU availability, subscription eligibility, quota or capacity.
+
+If you open the standard ARM **Edit parameters** screen, `availabilityZones` must still be a JSON **array of strings**: `["2"]` for one zone or `["1", "2"]` for two, never `2` or `"2"`. This entrypoint intentionally has no top-level `allowedValues` on that array, which made the generic editor offer a scalar dropdown and warn that the array default was not allowed. The same allowed string IDs are enforced by the nested session-host template instead; the custom form retains its multi-select choices and output normalization. For regional VMs, set `availability` to `None` and `availabilityZones` to `[]`.
 
 For example, after signing into the **customer's** subscription, this read-only command follows SKU-list pagination and includes subscription restrictions:
 
@@ -81,7 +87,7 @@ Register the required providers and verify private-link routing and DNS as descr
       - Enable relevant Defender solutions for better security posture in production environments. For cost estimation, refer to the [Azure Pricing Calculator](https://azure.microsoft.com/en-us/pricing/calculator/).
 - **Management plane** blade
   - **Deployment location** - Uses the management plane region selected on the Basics step. Supported service-object locations differ from session host VM locations; see [AVD data locations](https://learn.microsoft.com/azure/virtual-desktop/data-locations) for the metadata deployment scope.
-  - **Host pool type** - This option determines if a personal (aka single session) or pool (aka multi-session ) host pool will be configured.
+  - **Host pool type** - Personal assigns each session host to one user; Pooled shares host capacity. This setting does not change the original accelerator's Marketplace SKU filter or the selected OS edition.
   - When Pooled is selected:
     - **Load balancing algorithm** - Choose either breadth-first or depth-first, based on your usage pattern. Learn more about what each of these options means at [Host pool load-balancing methods](https://docs.microsoft.com/azure/virtual-desktop/host-pool-load-balancing).
     - **Max session limit** - Enter the maximum number of users you want load-balanced to a single session host.
@@ -94,7 +100,7 @@ Register the required providers and verify private-link routing and DNS as descr
   - **Deploy sessions hosts** - You can choose to not deploy session hosts just the Azure Virtual Desktop service objects.
   - **Session host region** - Defaults to Mexico Central, independently of the management plane region.
   - **Session hosts OU path (Optional)** - Provide OU where to locate session hosts, if not provided session hosts will be placed on the default (computers) OU. If left empty the computer account will be created in the default Computers OU. Example: OU=avd,DC=contoso,DC=com.
-  - **Availability zones** - Choose Availability Zones and select one or more logical zones from the selected region's multi-select list. The Multiva selection is zones 1 and 2. Verify the selected VM size and subscription restrictions for those zones and acknowledge the verification checkbox. The form always outputs an array of string zone identifiers, including for a single selection. Choose "No infrastructure redundancy required" explicitly for regional VMs; this is independent of the storage redundancy selection.
+  - **Availability zones** - Choose Availability Zones and select one or more logical IDs from the template's literal multi-select list. The Multiva selection is zones 1 and 2. Verify the selected region, VM size and subscription restrictions for those zones and acknowledge the verification checkbox. The form always outputs an array of string zone identifiers, including for a single selection. Choose "No infrastructure redundancy required" explicitly for regional VMs; this is independent of the storage redundancy selection.
   - **VM size** -  Select the SKU size for the session hosts.
   - **VM count** - Select the number of session hosts to deploy.
   - **OS disk type** - Select the OS Disk SKU type. Premium is recommended for performance and a higher SLA.

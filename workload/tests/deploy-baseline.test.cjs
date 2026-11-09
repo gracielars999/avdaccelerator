@@ -175,15 +175,7 @@ function state() {
     managementPlane: { managementPlaneHostPoolSettings: {} },
     sessionHosts: {
       sessionHostsRegionSection: {
-        computeApi: { value: [{ resourceType: 'virtualMachines', locations: ['Mexico Central', 'East US 2'] }] },
-        locationZonesApi: { value: [
-          { name: 'eastus2', availabilityZoneMappings: [{ logicalZone: '3', physicalZone: 'eastus2-az1' }] },
-          { name: 'mexicocentral', availabilityZoneMappings: [
-            { logicalZone: '1', physicalZone: 'mexicocentral-az3' },
-            { logicalZone: '2', physicalZone: 'mexicocentral-az1' },
-            { logicalZone: '3', physicalZone: 'mexicocentral-az2' }
-          ] }
-        ] }
+        computeApi: { value: [{ resourceType: 'virtualMachines', locations: ['Mexico Central', 'East US 2'] }] }
       },
       sessionHostsOsSection: {
         skusApi: [{ name: 'win11-24h2-ent' }, { name: 'win11-24h2-avd' }, { name: 'win11-23h2-ent' }]
@@ -276,7 +268,7 @@ test('Multiva form defaults produce the matching compiled template values', () =
   const expected = {
     avdSessionHostLocation: 'mexicocentral', avdManagementPlaneLocation: 'eastus2',
     avdHostPoolType: 'Personal', avdSessionHostDiskType: 'Premium_LRS',
-    mpImageOffer: 'windows-11', mpImageSku: 'win11-24h2-ent',
+    mpImageOffer: 'windows-11', mpImageSku: 'win11-24h2-avd',
     availability: 'AvailabilityZones', availabilityZones: ['1', '2'],
     createAvdFslogixDeployment: false, createAvdVnet: true,
     avdVnetworkAddressPrefixes: '10.131.0.0/16',
@@ -304,6 +296,7 @@ test('Multiva form defaults produce the matching compiled template values', () =
 
 for (const [selection, expected] of [
   [1, ['1']], ['1', ['1']], [['1'], ['1']], [[1], ['1']],
+  [2, ['2']], ['2', ['2']], [['2'], ['2']], [[2], ['2']],
   [['1', '2'], ['1', '2']], [[1, 2], ['1', '2']], [['1', '2', '3'], ['1', '2', '3']]
 ]) {
   test(`saved zone expression normalizes ${JSON.stringify(selection)} to a flat string array`, () => {
@@ -311,7 +304,7 @@ for (const [selection, expected] of [
     value.sessionHosts.sessionHostsAvailabilitySection.availabilityZones = selection;
     const result = output('availabilityZones', value);
     assert.deepEqual(result, expected);
-    assert.ok(result.every(zone => template.parameters.availabilityZones.allowedValues.includes(zone)));
+    assert.ok(result.every(zone => hostsTemplate.parameters.availabilityZones.allowedValues.includes(zone)));
     assert.equal(template.parameters.availabilityZones.type.toLowerCase(), 'array');
     assert.equal(hostsTemplate.parameters.availabilityZones.type.toLowerCase(), 'array');
   });
@@ -327,13 +320,28 @@ test('regional and no-session-host modes output an empty zone array', () => {
   assert.deepEqual(output('availabilityZones', value), []);
 });
 
-test('zone choices use the selected region and logical identifiers rather than the first region or physical zones', () => {
-  const value = state();
-  assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
-    ['1', '2', '3']);
-  value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = 'EastUS2';
-  assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
-    ['3']);
+test('native zone choices are literal string identifiers matching the compiled array contract', () => {
+  const allowed = control('availabilityZones').constraints.allowedValues;
+  assert.ok(Array.isArray(allowed), 'Zone choices must not be a Portal expression.');
+  assert.deepEqual(allowed, [
+    { label: 'Zone 1', value: '1' },
+    { label: 'Zone 2', value: '2' },
+    { label: 'Zone 3', value: '3' }
+  ]);
+  assert.deepEqual(allowed.map(item => item.value), hostsTemplate.parameters.availabilityZones.allowedValues);
+});
+
+test('Edit parameters retains an array input while nested ARM validation still constrains logical IDs', () => {
+  const parameter = template.parameters.availabilityZones;
+  assert.equal(parameter.type, 'array');
+  assert.deepEqual(parameter.defaultValue, ['1', '2']);
+  assert.equal(Object.hasOwn(parameter, 'allowedValues'), false,
+    'A top-level enum makes the generic Portal editor render a scalar dropdown for an array.');
+  assert.equal(hostsTemplate.parameters.availabilityZones.type, 'array');
+  assert.deepEqual(hostsTemplate.parameters.availabilityZones.allowedValues, ['1', '2', '3']);
+  assert.deepEqual(hostsTemplate.parameters.availabilityZones.defaultValue, []);
+  assert.ok(parameter.defaultValue.every(zone =>
+    hostsTemplate.parameters.availabilityZones.allowedValues.includes(zone)));
 });
 
 test('missing or paged SKU data cannot remove Availability Zones or change the zonal default', () => {
@@ -352,61 +360,50 @@ test('missing or paged SKU data cannot remove Availability Zones or change the z
   assert.equal(JSON.stringify(form).includes('resourceSkusApi'), false);
 });
 
-test('Mexico zone choices and defaults do not depend on missing subscription zone mappings', () => {
+test('native zone defaults select 1 and 2 without lookup or default expressions', () => {
   const value = state();
-  for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
-    { value: [{ name: 'mexicocentral' }] },
-    { value: [{ name: 'mexicocentral', availabilityZoneMappings: [] }] }]) {
-    value.sessionHosts.sessionHostsRegionSection.locationZonesApi = response;
+  const element = control('availabilityZones');
+  assert.deepEqual(element.defaultValue, [{ value: '1' }, { value: '2' }]);
+  assert.equal(element.multiselect, true);
+  assert.equal(element.selectAll, true);
+  assert.equal(element.constraints.required, true);
+  assert.deepEqual(defaultValue('availabilityZones', value), ['1', '2']);
+});
+
+test('zone choices remain nonempty before region and subscription data are available', () => {
+  const value = state();
+  for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] }]) {
+    value.basics.resourceScope.subscription = undefined;
+    value.sessionHosts.sessionHostsRegionSection.computeApi = response;
+    value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = undefined;
+    assert.equal(defaultValue('option', value), 'AvailabilityZones');
     assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
       ['1', '2', '3']);
     assert.deepEqual(defaultValue('availabilityZones', value), ['1', '2']);
-    assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
-    assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
-    assert.equal(uiEvaluate(control('availabilityZonesSkuWarning').visible, value), true);
   }
 });
 
-test('pending, failed and missing zone lookups outside Mexico show a warning without silently selecting regional deployment', () => {
-  const value = state();
-  value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = 'eastus2';
-  for (const response of [undefined, {}, { error: { code: 'AuthorizationFailed' } }, { value: [] },
-    { value: [{ name: 'eastus2', availabilityZoneMappings: [] }] },
-    { value: [{ name: 'eastus2' }] },
-    { value: [{ name: 'mexicocentral', availabilityZoneMappings: [] }] }]) {
-    value.sessionHosts.sessionHostsRegionSection.locationZonesApi = response;
-    assert.equal(defaultValue('option', value), 'AvailabilityZones');
-    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value), []);
-    assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), true);
-    assert.equal(control('availabilityZones').constraints.required, true);
+test('the form has no legacy regional zone API or expression-based lookup warning', () => {
+  for (const name of ['locationZonesApi', 'availabilityZonesLookupWarning']) {
+    assert.equal([...objects(form)].some(element => element.name === name), false);
+    assert.equal(JSON.stringify(form).includes(name), false);
   }
-  value.sessionHosts.sessionHostsAvailabilitySection.option = 'None';
-  assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
 });
 
-test('regional lookup is scoped to the selected subscription and never uses the metadata region for Mexico VM zones', () => {
+test('manual zone identifiers do not replace the required region selection or SKU verification', () => {
   const value = state();
-  assert.equal(uiEvaluate(control('locationZonesApi').request.path, value),
-    `/subscriptions/${value.basics.resourceScope.subscription.subscriptionId}/locations?api-version=2022-12-01`);
-  assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), false);
-  assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
-  value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = 'eastus2';
-  assert.equal(uiEvaluate(control('locationZonesApi').condition, value), true);
-  value.basics.resourceScope.subscription.subscriptionId = '';
-  assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
-});
-
-test('a region not selected yet leaves required zones empty and shows the lookup warning', () => {
-  const value = state();
-  for (const region of [undefined, null, '']) {
+  for (const region of [undefined, null, '', 'mexicocentral', 'eastus2']) {
     value.sessionHosts.sessionHostsRegionSection.sessionHostsRegion = region;
-    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value), []);
-    assert.equal(uiEvaluate(control('availabilityZonesLookupWarning').visible, value), true);
-    assert.equal(uiEvaluate(control('locationZonesApi').condition, value), false);
+    assert.deepEqual(uiEvaluate(control('availabilityZones').constraints.allowedValues, value).map(item => item.value),
+      ['1', '2', '3']);
+    assert.equal(uiEvaluate(control('availabilityZonesSkuWarning').visible, value), true);
+    assert.equal(uiEvaluate(control('confirmZonalSkuAvailability').visible, value), true);
   }
+  assert.equal(control('sessionHostsRegion').constraints.required, true);
+  assert.equal(control('confirmZonalSkuAvailability').constraints.required, true);
 });
 
-test('zonal selection explicitly requires VM-size verification instead of claiming regional mappings prove SKU availability', () => {
+test('zonal selection explicitly requires verification instead of treating manual identifiers as SKU availability', () => {
   const value = state();
   assert.equal(uiEvaluate(control('availabilityZonesSkuWarning').visible, value), true);
   assert.equal(uiEvaluate(control('confirmZonalSkuAvailability').visible, value), true);
@@ -417,10 +414,21 @@ test('zonal selection explicitly requires VM-size verification instead of claimi
   assert.equal(uiEvaluate(control('confirmZonalSkuAvailability').visible, value), false);
 });
 
-test('Marketplace filtering retains both single-session Enterprise and multi-session choices', () => {
-  const values = uiEvaluate(control('sku').constraints.allowedValues, state()).map(item => item.value);
-  assert.ok(values.includes('win11-24h2-ent'));
-  assert.ok(values.includes('win11-24h2-avd'));
+test('Marketplace filtering exactly matches the original AVD-only expression for Personal and Pooled', () => {
+  const originalFilter = "[map(filter(steps('sessionHosts').sessionHostsOsSection.skusApi, (sku) => and(startsWith(sku.name, 'win'), not(contains(sku.name, 'ent')), or(contains(sku.name, 'ent'), contains(sku.name, 'avd')))), (sku) => parse(concat('{\"label\":\"', sku.name, '\",\"value\":\"', sku.name, '\"}')))]";
+  assert.equal(control('sku').constraints.allowedValues, originalFilter);
+  const avd = ['win11-23h2-avd', 'win11-24h2-avd', 'win11-25h2-avd', 'win11-26h2-avd'];
+  for (const type of ['Personal', 'Pooled']) {
+    const value = state();
+    value.managementPlane.managementPlaneHostPoolSettings.hostPoolType = type;
+    value.sessionHosts.sessionHostsOsSection.skusApi = [
+      ...avd, 'win11-24h2-ent', 'win11-24h2-pro', 'win11-24h2-home', 'win11-24h2-avd-ent'
+    ].map(name => ({ name }));
+    const values = uiEvaluate(control('sku').constraints.allowedValues, value).map(item => item.value);
+    assert.deepEqual(values, avd);
+    assert.equal(defaultValue('sku', value), 'win11-24h2-avd');
+    assert.equal(output('mpImageSku', value), 'win11-24h2-avd');
+  }
 });
 
 test('Create new private DNS is the native form default and does not request existing zone IDs', () => {
@@ -574,14 +582,19 @@ test('credentials and tenant-specific enterprise application IDs remain customer
 
 test('generated VM zone assignment consumes one or several zones round-robin', () => {
   const module = hostsTemplate.resources.find(value => value.copy?.name === 'sessionHosts');
-  for (const zones of [['1'], ['1', '2']]) {
+  for (const [zones, expected] of [
+    [['1'], [1, 1, 1, 1]],
+    [['2'], [2, 2, 2, 2]],
+    [['1', '2'], [1, 2, 1, 2]],
+    [['1', '2', '3'], [1, 2, 3, 1]]
+  ]) {
     const context = armContext(hostsTemplate, { availabilityZones: zones, availability: 'AvailabilityZones', count: 4 });
     assert.deepEqual(context.variables('varZones'), zones.map(Number));
     const assigned = Array.from({ length: 4 }, (_, index) => {
       context.indices.set('', index);
       return context.evaluate(module.properties.parameters.zone).value;
     });
-    assert.deepEqual(assigned, zones.length === 1 ? [1, 1, 1, 1] : [1, 2, 1, 2]);
+    assert.deepEqual(assigned, expected);
   }
 });
 

@@ -236,12 +236,8 @@ param avdSessionHostCountIndex int = 1
 ])
 param availability string = 'AvailabilityZones'
 
-@sys.description('Array of availability zone identifiers for the session hosts, including when selecting just one zone. (Default: zones 1 and 2)')
-@allowed([
-  '1'
-  '2'
-  '3'
-])
+// Constrain zone IDs in the session-host module so Portal's generic editor keeps an array input.
+@sys.description('Array of session-host logical zone identifiers as strings. In Edit parameters, enter ["1"] or ["1", "2"], never a scalar. (Default: zones 1 and 2)')
 param availabilityZones array = ['1', '2']
 
 @sys.description('When true, Zone Redundant Storage (ZRS) is used, when set to false, Locally Redundant Storage (LRS) is used. (Default: false)')
@@ -304,8 +300,8 @@ param useSharedImage bool = false
 @sys.description('AVD OS image offer. (Default: windows-11)')
 param mpImageOffer string = 'windows-11'
 
-@sys.description('AVD OS image SKU. (Default: win11-24h2-ent, Windows 11 Enterprise 24H2 single-session)')
-param mpImageSku string = 'win11-24h2-ent'
+@sys.description('AVD OS image SKU. (Default: win11-24h2-avd, Windows 11 Enterprise 24H2 multi-session)')
+param mpImageSku string = 'win11-24h2-avd'
 
 @sys.description('Source custom image ID. (Default: "")')
 param avdCustomImageDefinitionId string = ''

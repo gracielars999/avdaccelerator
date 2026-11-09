@@ -8,6 +8,26 @@ For a subscription deployment, Portal's `view.outputs.subscriptionId` must be a 
 
 Close an older deployment tab and reopen the newly published form; existing tabs or commit-pinned links keep the older output expression. Select the subscription and shared deployment/management region, then run **Review + create** again. Publication and offline contract checks do not constitute a successful live Portal validation or customer deployment. If the error persists with the new version, collect the full error JSON and form version without sharing credentials or access tokens.
 
+## Availability zone array becomes a scalar in Edit parameters
+
+The standard ARM **Edit parameters** screen is not the accelerator's custom multi-select form. An array parameter with a top-level `allowedValues` list can appear there as a single-choice dropdown, with the warning that its array default is not present in the allowed list. Choosing `2` in that dropdown can submit a scalar even though the template requires an array.
+
+The baseline keeps `availabilityZones` as an array, defaults it to `["1", "2"]`, and moves its allowed logical string IDs (`"1"`, `"2"`, `"3"`) to the nested session-host template. This avoids the top-level enum control without removing the nested ARM constraint. The custom form uses literal zone choices and continues to normalize one or multiple selections to an array of strings.
+
+When editing parameters directly, enter `["2"]` for one zone or `["1", "2"]` for two. A parameter file must use `"availabilityZones": { "value": ["1", "2"] }`, not a scalar or comma-separated string. For regional VMs, explicitly set `availability` to `None` and the zone array to `[]`. Reopen the newly published template; old tabs and commit-pinned URLs retain the previous parameter schema. These structural corrections still require a fresh customer Portal test.
+
+## AADLoginForWindows: Entra device join failed
+
+A failure of the `AADLogin` extension (`Microsoft.Azure.ActiveDirectory/AADLoginForWindows`) is an Entra device-join failure, not a monitoring-policy deployment failure. The reported signed status `-2145648526` converts to HRESULT `0x801C0072`; that value alone does not establish a permissions, networking, image or Intune root cause. Do not substitute the documented meanings of other HRESULTs. "Device successfully unjoined" describes cleanup after the failure, not a successful join.
+
+The session-host source enables a system-assigned identity for Entra identity providers and only adds Intune's `mdmId` when `createIntuneEnrollment` is enabled. Verify the deployed VM's actual identity, image and extension settings rather than assuming it used the current form defaults. A Personal host-pool assignment and an AVD-only image filter do not prove the reason a join failed.
+
+Start with read-only Resource Health, VM/agent state and extension status. A deallocated VM or missing agent/extension status cannot provide a fresh guest diagnosis and does not prove that the earlier failure is resolved. Do not start, redeploy, replace, rejoin or rerun extensions without customer approval.
+
+Using an approved existing guest-access method, collect the failure-time `CommandExecution.log` (or its timestamped copy) under `C:\WindowsAzure\Logs\Plugins\Microsoft.Azure.ActiveDirectory.AADLoginForWindows\<version>\`, plus the related **User Device Registration/Admin** events and `dsregcmd /status`. Preserve the inner server error, failure phase and correlation ID; redact credentials, access tokens and other unnecessary customer identifiers. Check system-assigned identity/IMDS tenant information and required Entra DNS/HTTPS reachability. If Intune enrollment was enabled, also check the tenant's enrollment configuration and prerequisites; do not silently disable enrollment as a purported fix.
+
+Follow [Microsoft's Windows VM Entra sign-in deployment troubleshooting](https://learn.microsoft.com/entra/identity/devices/howto-vm-sign-in-azure-ad-windows#troubleshoot-deployment-problems). That guidance lists the required endpoint checks and distinguishes join failures from later user-login RBAC failures. Do not share the managed-identity token returned by its diagnostic commands. The generic extension error, without guest evidence, is not a confirmed root cause or proof that this fork fixes it.
+
 ## Monitoring and subscription-level policies
 
 **Insufficient permissions can cause this option to fail, but a previous unspecified monitoring error cannot be attributed to RBAC without the failed operation.** The Multiva profile disables monitoring by explicit customer request, not as a workaround or proof that the failure is fixed.

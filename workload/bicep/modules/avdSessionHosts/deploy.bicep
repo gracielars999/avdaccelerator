@@ -43,7 +43,12 @@ param countIndex int
 @sys.description('When true VMs are distributed across availability zones, when set to false, VMs will be deployed at regional level. (Default: true).')
 param availability string
 
-@sys.description('Defines the Availability Zones for the VMs.')
+@sys.description('Defines the logical availability zone identifiers for the VMs as an array of strings.')
+@allowed([
+  '1'
+  '2'
+  '3'
+])
 param availabilityZones array = []
 
 // @sys.description('VMSS flex name.')
