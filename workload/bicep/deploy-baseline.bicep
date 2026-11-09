@@ -32,8 +32,14 @@ param avdSessionHostLocation string = 'mexicocentral'
 @sys.description('Location where to deploy AVD management plane. AVD metadata is stored outside Mexico with this default. (Default: eastus2)')
 param avdManagementPlaneLocation string = 'eastus2'
 
-@sys.description('AVD workload subscription ID, multiple subscriptions scenario. (Default: "")')
-param avdWorkloadSubsId string
+@minLength(1)
+@maxLength(36)
+// Keep PSDocs JSON examples from overriding this ARM-evaluated default.
+@sys.metadata({
+  ignore: true
+})
+@sys.description('Workload subscription GUID. Defaults to the subscription selected for this deployment. Override only for an intentional cross-subscription deployment; an explicit blank is not valid.')
+param avdWorkloadSubsId string = subscription().subscriptionId
 
 @sys.description('Azure Virtual Desktop Enterprise Application object ID (Enterprise app name: Azure Virtual Desktop) . (Default: "")')
 param avdServicePrincipalObjectId string = ''

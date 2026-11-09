@@ -7,6 +7,7 @@ const root = resolve(__dirname, '..', '..');
 const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 const form = JSON.parse(read('workload', 'portal-ui', 'portal-ui-baseline.json'));
 const template = JSON.parse(read('workload', 'arm', 'deploy-baseline.json'));
+const subscriptionIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 function* objects(value) {
   if (!value || typeof value !== 'object') return;
@@ -223,8 +224,10 @@ const templates = [...objects(template)].filter(value => value.$schema && value.
 const hostsTemplate = templates.find(value => value.variables?.copy?.some(item => item.name === 'varZones'));
 const hostsDeployment = template.resources.find(value => value.properties?.template === hostsTemplate);
 const policyTemplate = templates.find(value => value.variables?.varCustomPolicySetDefinitions);
+const workloadSubscriptionDependency = template.resources.flatMap(value => value.dependsOn ?? [])
+  .find(value => value.startsWith("[subscriptionResourceId(parameters('avdWorkloadSubsId'),"));
 
-function armContext(arm, parameters) {
+function armContext(arm, parameters, deploymentSubscriptionId) {
   const cache = new Map();
   const indices = new Map();
   const resolveValue = value => {
@@ -237,8 +240,22 @@ function armContext(arm, parameters) {
   const context = {
     ...functions,
     parameters: name => {
-      assert.ok(Object.hasOwn(parameters, name), `Missing parameter ${name}`);
-      return parameters[name];
+      if (Object.hasOwn(parameters, name)) return parameters[name];
+      const definition = arm.parameters?.[name];
+      assert.ok(definition && Object.hasOwn(definition, 'defaultValue'), `Missing parameter ${name}`);
+      return resolveValue(definition.defaultValue);
+    },
+    subscription: () => {
+      assert.match(deploymentSubscriptionId, subscriptionIdPattern);
+      return { subscriptionId: deploymentSubscriptionId };
+    },
+    subscriptionResourceId: (...args) => {
+      const [subscriptionId, resourceType, ...names] = /^[^/]+\.[^/]+\//.test(args[0])
+        ? [context.subscription().subscriptionId, ...args]
+        : args;
+      assert.match(subscriptionId, subscriptionIdPattern,
+        `The provided value '${subscriptionId}' is not valid subscription identifier.`);
+      return `/subscriptions/${subscriptionId}/providers/${resourceType}/${names.join('/')}`;
     },
     copyIndex: (name = '') => {
       assert.ok(indices.has(name), `Missing copy index ${name}`);
@@ -547,7 +564,7 @@ test('retention validates every integer from 30 through 730 and exports an integ
   assert.equal(template.parameters.avdAlaWorkspaceDataRetention.type, 'int');
 });
 
-test('deployment scope outputs a subscription ARM ID while template parameters and API scopes retain the GUID', () => {
+test('deployment scope exports an ARM ID without duplicating the workload subscription override', () => {
   for (const name of Object.keys(form.view.outputs.parameters)) assert.ok(Object.hasOwn(template.parameters, name), name);
   const value = state();
   assert.equal(form.view.outputs.kind, 'Subscription');
@@ -556,13 +573,70 @@ test('deployment scope outputs a subscription ARM ID while template parameters a
     `/subscriptions/${value.basics.resourceScope.subscription.subscriptionId}`);
   assert.match(uiEvaluate(form.view.outputs.subscriptionId, value),
     /^\/subscriptions\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
-  assert.equal(output('avdWorkloadSubsId', value), value.basics.resourceScope.subscription.subscriptionId);
+  assert.equal(Object.hasOwn(form.view.outputs.parameters, 'avdWorkloadSubsId'), false);
   assert.equal(control('resourceScope').type, 'Microsoft.Common.ResourceScope');
   for (const name of ['avdVirtualNetworkSelectorId', 'privateEndpointVirtualNetworkSelectorId',
     'alaWorkspaceExistingWorkspacesSelection']) {
     const element = control(name);
     assert.equal(uiEvaluate(element.scope.subscriptionId, value), value.basics.resourceScope.subscription.subscriptionId);
   }
+});
+
+test('workload subscription defaults to the deployment selection and reaches every subscription-bearing module', () => {
+  assert.equal(template.parameters.avdWorkloadSubsId.defaultValue, '[subscription().subscriptionId]');
+  assert.equal(template.parameters.avdWorkloadSubsId.metadata.ignore, true);
+  assert.ok(workloadSubscriptionDependency, 'Exercise a generated subscriptionResourceId dependency.');
+  for (const subscriptionId of [
+    '00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000002'
+  ]) {
+    const context = armContext(template, { time: 'scope-check' }, subscriptionId);
+    assert.ok(context.evaluate(workloadSubscriptionDependency).startsWith(`/subscriptions/${subscriptionId}/providers/`));
+    let checked = 0;
+    for (const resource of template.resources) {
+      for (const name of ['subscriptionId', 'workloadSubsId']) {
+        const parameter = resource.properties?.parameters?.[name];
+        if (!parameter) continue;
+        assert.equal(context.evaluate(parameter.value), subscriptionId, `${resource.name}: ${name}`);
+        checked++;
+      }
+    }
+    assert.ok(checked > 0);
+  }
+});
+
+test('an explicit cross-subscription workload override does not change the deployment record subscription', () => {
+  const deploymentSubscriptionId = '00000000-0000-4000-8000-000000000001';
+  const workloadSubscriptionId = '00000000-0000-4000-8000-000000000002';
+  const context = armContext(template, { avdWorkloadSubsId: workloadSubscriptionId, time: 'scope-check' },
+    deploymentSubscriptionId);
+  assert.equal(context.evaluate('[subscription().subscriptionId]'), deploymentSubscriptionId);
+  assert.ok(context.evaluate(workloadSubscriptionDependency)
+    .startsWith(`/subscriptions/${workloadSubscriptionId}/providers/`));
+});
+
+test('an explicit blank workload subscription remains invalid instead of falling back to another scope', () => {
+  const context = armContext(template, { avdWorkloadSubsId: '', time: 'scope-check' },
+    '00000000-0000-4000-8000-000000000001');
+  assert.throws(() => context.evaluate(workloadSubscriptionDependency), /value '' is not valid subscription identifier/);
+  assert.equal(template.parameters.avdWorkloadSubsId.minLength, 1);
+  assert.equal(template.parameters.avdWorkloadSubsId.maxLength, 36);
+});
+
+test('baseline parameter samples inherit the selected subscription instead of sending a blank override', () => {
+  for (const name of ['deploy-baseline-all.bicepparam', 'deploy-baseline-required-only.bicepparam']) {
+    assert.doesNotMatch(read('workload', 'bicep', 'parameters', name), /^param avdWorkloadSubsId\s*=/m, name);
+  }
+});
+
+test('generated JSON parameter examples omit the ARM-evaluated subscription default', () => {
+  const reference = read('workload', 'docs', 'autoGenerated', 'deploy-baseline.bicep.md');
+  const samples = [...reference.matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)]
+    .map(match => JSON.parse(match[1]));
+  const parameters = samples.find(value => value.$schema?.includes('deploymentParameters.json'));
+  assert.ok(parameters, 'Check the generated JSON parameter-file example, not only the parameter description.');
+  assert.equal(Object.hasOwn(parameters.parameters, 'avdWorkloadSubsId'), false);
+  assert.match(reference, /avdWorkloadSubsId \| No\s+\|/);
 });
 
 test('one editable native region drives both deployment review and AVD management while VM location stays separate', () => {
@@ -632,7 +706,7 @@ test('disabled storage and missing zone mappings do not read an undefined locati
 });
 
 test('credentials and tenant-specific enterprise application IDs remain customer inputs', () => {
-  for (const name of ['avdVmLocalUserName', 'avdVmLocalUserPassword', 'avdWorkloadSubsId']) {
+  for (const name of ['avdVmLocalUserName', 'avdVmLocalUserPassword']) {
     assert.equal(Object.hasOwn(template.parameters[name], 'defaultValue'), false, name);
   }
   assert.equal(template.parameters.avdVmLocalUserPassword.type.toLowerCase(), 'securestring');

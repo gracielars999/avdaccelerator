@@ -5,7 +5,7 @@ param deploymentEnvironment = 'Dev'
 param diskEncryptionKeyExpirationInDays = 60
 param avdSessionHostLocation = 'mexicocentral'
 param avdManagementPlaneLocation = 'eastus2'
-param avdWorkloadSubsId = ''
+// Inherit the deployment subscription; set a GUID only for an intentional cross-subscription override.
 param avdServicePrincipalObjectId = ''
 param avdArmServicePrincipalObjectId = ''
 param avdVmLocalUserName = ''

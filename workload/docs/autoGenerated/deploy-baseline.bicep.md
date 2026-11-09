@@ -11,7 +11,7 @@ deploymentEnvironment | No       | The name of the resource group to deploy. (De
 diskEncryptionKeyExpirationInDays | No       | This value is used to set the expiration date on the disk encryption key. (Default: 60)
 avdSessionHostLocation | No       | Location where to deploy compute services. (Default: mexicocentral)
 avdManagementPlaneLocation | No       | Location where to deploy AVD management plane. AVD metadata is stored outside Mexico with this default. (Default: eastus2)
-avdWorkloadSubsId | Yes      | AVD workload subscription ID, multiple subscriptions scenario. (Default: "")
+avdWorkloadSubsId | No       | Workload subscription GUID. Defaults to the subscription selected for this deployment. Override only for an intentional cross-subscription deployment; an explicit blank is not valid.
 avdServicePrincipalObjectId | No       | Azure Virtual Desktop Enterprise Application object ID (Enterprise app name: Azure Virtual Desktop) . (Default: "")
 avdArmServicePrincipalObjectId | No       | Azure Virtual Desktop ARM Enterprise Application Object Id (Enterprise app name: Azure Virtual Desktop ARM Provider). Required for the deployment of App Attach File Share with EntraID identity provider. (Default: "")
 avdVmLocalUserName | Yes      | AVD session host local username.
@@ -179,9 +179,11 @@ Location where to deploy AVD management plane. AVD metadata is stored outside Me
 
 ### avdWorkloadSubsId
 
-![Parameter Setting](https://img.shields.io/badge/parameter-required-orange?style=flat-square)
+![Parameter Setting](https://img.shields.io/badge/parameter-optional-green?style=flat-square)
 
-AVD workload subscription ID, multiple subscriptions scenario. (Default: "")
+Workload subscription GUID. Defaults to the subscription selected for this deployment. Override only for an intentional cross-subscription deployment; an explicit blank is not valid.
+
+- Default value: `[subscription().subscriptionId]`
 
 ### avdServicePrincipalObjectId
 
@@ -1178,9 +1180,6 @@ Enable Microsoft Defender for Azure Resource Manager. (Default: true)
         },
         "avdManagementPlaneLocation": {
             "value": "eastus2"
-        },
-        "avdWorkloadSubsId": {
-            "value": ""
         },
         "avdServicePrincipalObjectId": {
             "value": ""

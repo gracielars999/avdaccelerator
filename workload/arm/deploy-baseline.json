@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "17574399856956389175"
+      "templateHash": "2296387320038812629"
     },
     "name": "AVD Accelerator - Multiva Baseline Deployment",
     "description": "Multiva baseline with Mexico Central session hosts and East US 2 AVD service objects",
@@ -58,9 +58,13 @@
     },
     "avdWorkloadSubsId": {
       "type": "string",
+      "defaultValue": "[subscription().subscriptionId]",
       "metadata": {
-        "description": "AVD workload subscription ID, multiple subscriptions scenario. (Default: \"\")"
-      }
+        "ignore": true,
+        "description": "Workload subscription GUID. Defaults to the subscription selected for this deployment. Override only for an intentional cross-subscription deployment; an explicit blank is not valid."
+      },
+      "minLength": 1,
+      "maxLength": 36
     },
     "avdServicePrincipalObjectId": {
       "type": "string",

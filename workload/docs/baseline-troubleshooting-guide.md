@@ -4,9 +4,17 @@
 
 If the error is a `TypeError` in the `Microsoft_Azure_CreateUIDef` extension with `getFormTemplateDeploymentOptions` in its stack, it occurs during the Portal's form-to-deployment conversion, before ARM validation. It is not evidence of a monitoring-policy permission failure.
 
-For a subscription deployment, Portal's `view.outputs.subscriptionId` must be a subscription **ARM ID**, `/subscriptions/<subscription-id>`, not the bare GUID. The reported converter parses that ID to build its deployment scope; an invalid scope can leave that object undefined before its `location` is read. This fork constructs the ARM ID from the selected subscription GUID for the deployment output. The template parameter `avdWorkloadSubsId` and resource/API picker scopes still use the GUID, as required.
+For a subscription deployment, Portal's `view.outputs.subscriptionId` must be a subscription **ARM ID**, `/subscriptions/<subscription-id>`, not the bare GUID. The reported converter parses that ID to build its deployment scope; an invalid scope can leave that object undefined before its `location` is read. This fork constructs the ARM ID from the selected subscription GUID for the deployment output. Resource/API picker scopes use the GUID, and the template's `avdWorkloadSubsId` inherits the GUID from the actual deployment subscription unless explicitly overridden.
 
 Close an older deployment tab and reopen the newly published form; existing tabs or commit-pinned links keep the older output expression. Select the subscription and shared deployment/management region, then run **Review + create** again. Publication and offline contract checks do not constitute a successful live Portal validation or customer deployment. If the error persists with the new version, collect the full error JSON and form version without sharing credentials or access tokens.
+
+## InvalidTemplate: subscription identifier is empty
+
+The message `The provided value '' is not valid subscription identifier` means a resource-ID expression received an empty subscription value, not that the deployer lacks a role. The baseline's generated `subscriptionResourceId(...)` dependencies use `avdWorkloadSubsId` or a forwarded `subscriptionId`; older parameter samples explicitly supplied `avdWorkloadSubsId = ''`. Selecting a subscription for the deployment does not by itself populate a separately required template parameter.
+
+The baseline now defaults `avdWorkloadSubsId` to `subscription().subscriptionId`, using the actual customer-selected deployment scope without embedding a customer ID. The custom form omits the duplicate override, both parameter samples inherit the default, and explicit blanks are disallowed. Cross-subscription deployments can still supply an intentional workload subscription GUID with the required permissions at both scopes.
+
+With the corrected template, remove an old `"avdWorkloadSubsId": { "value": "" }` entry from a JSON parameter file to inherit the deployment selection, or replace it with the intended GUID for an explicit override. Do not supply `/subscriptions/<guid>` as this parameter. An explicit empty string is not equivalent to omitting the parameter and does not activate its default; see the [subscriptionResourceId reference](https://learn.microsoft.com/azure/azure-resource-manager/templates/template-functions-resource#subscriptionresourceid). Reopen the corrected deployment link rather than reusing an old saved blank payload. Offline validation does not establish a successful customer deployment.
 
 ## Availability zone array becomes a scalar in Edit parameters
 

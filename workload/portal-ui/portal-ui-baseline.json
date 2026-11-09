@@ -43,7 +43,7 @@
 							"visible": true,
 							"options": {
 								"style": "Info",
-								"text": "Use the single region picker below for both the subscription deployment record and AVD service objects (workspace, host pool and application groups). Select East US 2 for Multiva; this associates AVD metadata with the US geography, outside Mexico. The VM region is selected separately on Session Hosts and defaults to Mexico Central. The subscription selected below will be used to deploy the resources. Monitoring is disabled by request; if enabled with a new Log Analytics workspace, that workspace uses the shared management plane region.",
+								"text": "Use the single region picker below for both the subscription deployment record and AVD service objects (workspace, host pool and application groups). Select East US 2 for Multiva; this associates AVD metadata with the US geography, outside Mexico. The VM region is selected separately on Session Hosts and defaults to Mexico Central. The workload inherits the subscription selected below for the deployment; no separate subscription ID is required. Monitoring is disabled by request; if enabled with a new Log Analytics workspace, that workspace uses the shared management plane region.",
 								"uri": "https://docs.microsoft.com/azure/virtual-desktop/data-locations"
 							}
 						},
@@ -2841,7 +2841,6 @@
 				"diskZeroTrust": "[steps('sessionHosts').sessionHostsSettingsSection.sessionHostDiskZeroTrust]",
 				"avdManagementPlaneLocation": "[steps('basics').resourceScope.location.name]",
 				"avdSessionHostLocation": "[if(equals(steps('sessionHosts').deploySessionHosts, true), steps('sessionHosts').sessionHostsRegionSection.sessionHostsRegion, steps('basics').resourceScope.location.name)]",
-				"avdWorkloadSubsId": "[steps('basics').resourceScope.subscription.subscriptionId]",
 				"avdHostPoolType": "[steps('managementPlane').managementPlaneHostPoolSettings.hostPoolType]",
 				"hostPoolPreferredAppGroupType": "[if(equals(steps('managementPlane').managementPlaneHostPoolSettings.hostPoolType, 'Pooled'), steps('managementPlane').managementPlaneAppGroupOptions.preferredAppGroupType, 'Desktop')]",
 				"avdHostPoolLoadBalancerType": "[steps('managementPlane').managementPlaneHostPoolSettings.loadBalancerType]",
